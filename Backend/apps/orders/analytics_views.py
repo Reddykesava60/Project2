@@ -75,15 +75,16 @@ class DailyAnalyticsView(APIView):
             created_at__date__lte=end_date
         )
         
-        # Daily breakdown - revenue only from completed orders with successful payment
+        # Daily breakdown - revenue only from completed orders with successful payment (lowercase)
         daily_stats = orders.annotate(
             date=TruncDate('created_at')
         ).values('date').annotate(
             order_count=Count('id'),
-            revenue=Sum('total_amount', filter=Q(status='COMPLETED', payment_status='SUCCESS')),
-            avg_order_value=Avg('total_amount', filter=Q(status='COMPLETED', payment_status='SUCCESS')),
-            completed=Count('id', filter=Q(status='COMPLETED', payment_status='SUCCESS')),
-            cancelled=Count('id', filter=F('status') == 'CANCELLED'),
+            revenue=Sum('total_amount', filter=Q(status='completed', payment_status='success')),
+            avg_order_value=Avg('total_amount', filter=Q(status='completed', payment_status='success')),
+            completed=Count('id', filter=Q(status='completed', payment_status='success')),
+            # Note: 'cancelled' status no longer exists per PRD - count as 0
+            cancelled=Count('id', filter=Q(status='cancelled')),  # Will always be 0
         ).order_by('date')
         
         # Hourly breakdown for today - revenue only from completed orders with successful payment
@@ -92,46 +93,46 @@ class DailyAnalyticsView(APIView):
             hour=TruncHour('created_at')
         ).values('hour').annotate(
             order_count=Count('id'),
-            revenue=Sum('total_amount', filter=Q(status='COMPLETED', payment_status='SUCCESS')),
+            revenue=Sum('total_amount', filter=Q(status='completed', payment_status='success')),
         ).order_by('hour')
         
-        # Summary stats - only count completed orders with successful payment
+        # Summary stats - only count completed orders with successful payment (lowercase)
         total_orders = orders.count()
         completed_orders = orders.filter(
-            status='COMPLETED',
-            payment_status='SUCCESS'
+            status='completed',
+            payment_status='success'
         ).count()
         total_revenue = orders.filter(
-            status='COMPLETED',
-            payment_status='SUCCESS'
+            status='completed',
+            payment_status='success'
         ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
         avg_order_value = total_revenue / completed_orders if completed_orders > 0 else Decimal('0')
         
-        # Cash vs Online breakdown - only completed orders with successful payment
+        # Cash vs UPI breakdown - only completed orders with successful payment (lowercase)
         payment_breakdown = orders.filter(
-            status='COMPLETED',
-            payment_status='SUCCESS'
+            status='completed',
+            payment_status='success'
         ).values('payment_method').annotate(
             count=Count('id'),
             revenue=Sum('total_amount')
         )
         
-        # Top selling items - only from completed orders with successful payment
+        # Top selling items - only from completed orders with successful payment (lowercase)
         from .models import OrderItem
         top_items = OrderItem.objects.filter(
             order__restaurant=restaurant,
             order__created_at__date__gte=start_date,
-            order__status='COMPLETED',
-            order__payment_status='SUCCESS'
+            order__status='completed',
+            order__payment_status='success'
         ).values('menu_item_name').annotate(
             quantity_sold=Sum('quantity'),
             revenue=Sum('subtotal')
         ).order_by('-quantity_sold')[:10]
         
-        # Peak hours - only completed orders with successful payment
+        # Peak hours - only completed orders with successful payment (lowercase)
         peak_hours = orders.filter(
-            status='COMPLETED',
-            payment_status='SUCCESS'
+            status='completed',
+            payment_status='success'
         ).values('hour_of_day').annotate(
             order_count=Count('id')
         ).order_by('-order_count')[:5]

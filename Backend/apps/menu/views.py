@@ -36,7 +36,7 @@ class MenuCategoryViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
-        if user.role == 'platform_admin':
+        if user.role in ['platform_admin', 'ADMIN']:
             return MenuCategory.objects.all()
         return MenuCategory.objects.filter(restaurant__owner=user)
     
@@ -123,7 +123,7 @@ class MenuItemViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
-        if user.role == 'platform_admin':
+        if user.role in ['platform_admin', 'ADMIN']:
             return MenuItem.objects.all()
         return MenuItem.objects.filter(restaurant__owner=user)
     

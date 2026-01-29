@@ -18,17 +18,9 @@ const orderStatusConfig: Record<OrderStatus, { label: string; className: string 
     label: 'Preparing',
     className: 'bg-info text-info-foreground',
   },
-  ready: {
-    label: 'Ready',
-    className: 'bg-success text-success-foreground',
-  },
   completed: {
     label: 'Completed',
     className: 'bg-muted text-muted-foreground',
-  },
-  cancelled: {
-    label: 'Cancelled',
-    className: 'bg-destructive text-destructive-foreground',
   },
 };
 
@@ -37,19 +29,16 @@ const paymentStatusConfig: Record<PaymentStatus, { label: string; className: str
     label: 'Unpaid',
     className: 'bg-warning text-warning-foreground',
   },
-  paid: {
+  // Backend uses "success" for successful payments; display it as "Paid"
+  success: {
     label: 'Paid',
     className: 'bg-success text-success-foreground',
-  },
-  failed: {
-    label: 'Failed',
-    className: 'bg-destructive text-destructive-foreground',
   },
 };
 
 const paymentMethodConfig: Record<PaymentMethod, { label: string; className: string }> = {
-  online: {
-    label: 'Online',
+  upi: {
+    label: 'UPI',
     className: 'bg-info text-info-foreground',
   },
   cash: {

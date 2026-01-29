@@ -135,7 +135,7 @@ function OrderSuccessContent() {
                 <span className="text-sm text-muted-foreground">Payment</span>
               </div>
               <div className="flex items-center gap-2">
-                <PaymentMethodBadge method={order?.payment_method || (isCashPayment ? 'cash' : 'online')} />
+                <PaymentMethodBadge method={order?.payment_method || (isCashPayment ? 'cash' : 'upi')} />
                 {order?.payment_status && (
                   <PaymentStatusBadge status={order.payment_status} />
                 )}
@@ -164,13 +164,11 @@ function OrderSuccessContent() {
                   <p className="font-medium text-foreground">
                     {order.status === 'pending' && 'Order Received'}
                     {order.status === 'preparing' && 'Being Prepared'}
-                    {order.status === 'ready' && 'Ready for Pickup!'}
                     {order.status === 'completed' && 'Order Complete'}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {order.status === 'pending' && 'The kitchen has received your order'}
                     {order.status === 'preparing' && 'Your food is being prepared'}
-                    {order.status === 'ready' && 'Come pick up your order at the counter'}
                     {order.status === 'completed' && 'Thank you for your order!'}
                   </p>
                 </div>

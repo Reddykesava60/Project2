@@ -66,11 +66,11 @@ class CustomTokenObtainPairView(TokenObtainPairView):
             
             # Get restaurant for audit log
             restaurant = None
-            if user.role == 'staff':
+            if user.role in ['staff', 'STAFF']:
                 staff_profile = getattr(user, 'staff_profile', None)
                 if staff_profile and staff_profile.restaurant:
                     restaurant = staff_profile.restaurant
-            elif user.role == 'restaurant_owner':
+            elif user.role in ['restaurant_owner', 'OWNER']:
                 restaurant = user.owned_restaurants.first()
             elif user.restaurant:
                 restaurant = user.restaurant

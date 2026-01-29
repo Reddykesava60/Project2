@@ -40,7 +40,7 @@ export const useCartStore = create<CartStore>()(
       restaurantSlug: null,
       items: [],
       customerName: '',
-      paymentMethod: 'online',
+      paymentMethod: 'upi',  // Backend uses 'upi' for online payments
       isParcel: false,
       spicyLevel: 'normal',
 
@@ -53,7 +53,7 @@ export const useCartStore = create<CartStore>()(
             restaurantSlug: slug,
             items: [],
             customerName: '',
-            paymentMethod: 'online',
+            paymentMethod: 'upi',  // Backend uses 'upi' for online payments
             isParcel: false,
             spicyLevel: 'normal',
           });
@@ -111,7 +111,7 @@ export const useCartStore = create<CartStore>()(
         set({
           items: [],
           customerName: '',
-          paymentMethod: 'online',
+          paymentMethod: 'upi',  // Backend uses 'upi' for online payments
           isParcel: false,
           spicyLevel: 'normal',
         }),

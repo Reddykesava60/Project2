@@ -165,7 +165,10 @@ export const orderApi = {
     handleResponse<Order>(http.post(`/orders/verify_qr/`, { token })),
 
   markCompleted: (id: string) =>
-    handleResponse<Order>(http.post(`/orders/${id}/update_status/`, { status: 'COMPLETED' })),
+    handleResponse<Order>(http.post(`/orders/${id}/update_status/`, { status: 'completed' })),
+
+  collectCash: (id: string) =>
+    handleResponse<Order>(http.post(`/orders/${id}/cash/`)),
 
   createCashOrder: (rid: string, items: any[], name: string) =>
     handleResponse<Order>(http.post(`/orders/staff/create/`, { restaurant: rid, items, customer_name: name })),
@@ -198,6 +201,8 @@ export const staffApi = {
 export const analyticsApi = {
   getDashboard: (restaurantId: string) =>
     handleResponse<DashboardStats>(http.get(`/analytics/dashboard/`, { params: { restaurant: restaurantId } })),
+  getDaily: (restaurantId: string, days = 7) =>
+    handleResponse<any>(http.get(`/analytics/daily/`, { params: { restaurant: restaurantId, days } })),
 };
 
 export const qrApi = {

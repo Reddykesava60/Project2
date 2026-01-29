@@ -5,11 +5,13 @@
 // User Roles
 export type UserRole = 'platform_admin' | 'restaurant_owner' | 'staff';
 
-// Order Types
-export type OrderType = 'customer_qr_online' | 'customer_qr_cash' | 'staff_cash';
-export type PaymentMethod = 'online' | 'cash';
-export type PaymentStatus = 'pending' | 'paid' | 'failed';
-export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+// Order Types - MUST match backend lowercase values
+export type OrderType = 'qr_customer' | 'staff_cash';
+export type PaymentMethod = 'cash' | 'upi';
+// Backend payment_status: ONLY pending or success (no failed/refunded)
+export type PaymentStatus = 'pending' | 'success';
+// Backend order status: ONLY pending | preparing | completed (no ready/cancelled)
+export type OrderStatus = 'pending' | 'preparing' | 'completed';
 
 // ============================================
 // USER & AUTHENTICATION

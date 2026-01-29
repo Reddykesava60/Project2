@@ -1,41 +1,55 @@
 'use client'
 
+import useSWR from 'swr'
 import { AppLayout } from '@/components/layout/app-layout'
 import { withAuth } from '@/components/auth/with-auth'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { analyticsApi } from '@/lib/api'
+import { useAuthStore } from '@/lib/store'
+import { ErrorState } from '@/components/ui/error-states'
+import { SkeletonCard } from '@/components/ui/loading-states'
+
+type RevenuePoint = { date: string; revenue: number }
+type OrdersByHourPoint = { hour: string; orders: number }
+type PaymentMethodPoint = { name: string; value: number; color: string }
+
+const PAYMENT_COLORS: Record<string, string> = {
+  cash: '#10b981',   // Backend uses lowercase
+  upi: '#3b82f6',    // Backend uses 'upi' not 'ONLINE'
+}
 
 function AnalyticsPage() {
-  const revenueData = [
-    { date: 'Jan 19', revenue: 2400 },
-    { date: 'Jan 20', revenue: 1398 },
-    { date: 'Jan 21', revenue: 3800 },
-    { date: 'Jan 22', revenue: 3908 },
-    { date: 'Jan 23', revenue: 4800 },
-    { date: 'Jan 24', revenue: 3200 },
-    { date: 'Jan 25', revenue: 2350 },
-  ]
+  const user = useAuthStore((state) => state.user)
+  const restaurantId = user?.restaurant_id
 
-  const ordersByHour = [
-    { hour: '9AM', orders: 5 },
-    { hour: '10AM', orders: 8 },
-    { hour: '11AM', orders: 12 },
-    { hour: '12PM', orders: 18 },
-    { hour: '1PM', orders: 15 },
-    { hour: '2PM', orders: 10 },
-    { hour: '3PM', orders: 7 },
-    { hour: '4PM', orders: 5 },
-    { hour: '5PM', orders: 14 },
-    { hour: '6PM', orders: 20 },
-    { hour: '7PM', orders: 22 },
-    { hour: '8PM', orders: 18 },
-  ]
+  const { data, error, isLoading } = useSWR(
+    restaurantId ? `/analytics/daily/${restaurantId}` : null,
+    () => analyticsApi.getDaily(restaurantId!),
+    { revalidateOnFocus: false }
+  )
 
-  const paymentMethods = [
-    { name: 'Cash', value: 35, color: '#10b981' },
-    { name: 'Online', value: 65, color: '#3b82f6' },
-  ]
+  const analytics = data?.data as any
+
+  const revenueData: RevenuePoint[] =
+    analytics?.daily_breakdown?.map((d: any) => ({
+      date: d.date?.slice(5) ?? '',
+      revenue: d.revenue ?? 0,
+    })) ?? []
+
+  const ordersByHour: OrdersByHourPoint[] =
+    analytics?.hourly_breakdown?.map((h: any) => ({
+      hour: h.hour ?? '',
+      orders: h.orders ?? 0,
+    })) ?? []
+
+  const paymentMethods: PaymentMethodPoint[] =
+    analytics?.payment_breakdown?.map((p: any) => ({
+      name: p.method === 'cash' ? 'Cash' : 'UPI',  // Backend uses lowercase: cash/upi
+      value: p.revenue ?? 0,
+      color: PAYMENT_COLORS[p.method] ?? '#3b82f6',
+    })) ?? []
 
   return (
     <AppLayout title="Analytics">
@@ -52,59 +66,73 @@ function AnalyticsPage() {
           </div>
 
           <TabsContent value="overview" className="space-y-4">
-            <div className="grid grid-cols-1 gap-4">
-              <Card className="mobile-card">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Revenue Trend (7 Days)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={revenueData}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                      <YAxis hide />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card className="mobile-card">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Payment Methods</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-around">
-                    <ResponsiveContainer width={150} height={150}>
-                      <PieChart>
-                        <Pie
-                          data={paymentMethods}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={40}
-                          outerRadius={60}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          {paymentMethods.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                      </PieChart>
+            {isLoading ? (
+              <div className="grid grid-cols-1 gap-4">
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+            ) : error || !data?.success ? (
+              <ErrorState
+                title="Failed to Load Analytics"
+                message="Unable to fetch analytics data."
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                <Card className="mobile-card">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Revenue Trend (7 Days)</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={revenueData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                        <YAxis hide />
+                        <Tooltip />
+                        <Line type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                      </LineChart>
                     </ResponsiveContainer>
-                    <div className="space-y-2">
-                      {paymentMethods.map((method) => (
-                        <div key={method.name} className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: method.color }} />
-                          <span className="text-sm">{method.name}: {method.value}%</span>
-                        </div>
-                      ))}
+                  </CardContent>
+                </Card>
+
+                <Card className="mobile-card">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Payment Methods</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center justify-around">
+                      <ResponsiveContainer width={150} height={150}>
+                        <PieChart>
+                          <Pie
+                            data={paymentMethods}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={40}
+                            outerRadius={60}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {paymentMethods.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="space-y-2">
+                        {paymentMethods.map((method) => (
+                          <div key={method.name} className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: method.color }} />
+                            <span className="text-sm">
+                              {method.name}: {method.value.toFixed(0)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="orders" className="space-y-4">

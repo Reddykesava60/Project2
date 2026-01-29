@@ -46,7 +46,7 @@ class RestaurantViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return Restaurant.objects.none()
             
-        if user.role == 'platform_admin':
+        if user.role in ['platform_admin', 'ADMIN']:
             return Restaurant.objects.all()
         return Restaurant.objects.filter(owner=user)
     
@@ -193,7 +193,7 @@ class StaffViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
-        if user.role == 'platform_admin':
+        if user.role in ['platform_admin', 'ADMIN']:
             return Staff.objects.all()
         return Staff.objects.filter(restaurant__owner=user)
     
@@ -335,7 +335,7 @@ class ApiKeyViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
-        if user.role == 'ADMIN':
+        if user.role in ['platform_admin', 'ADMIN']:
             return ApiKey.objects.all()
         return ApiKey.objects.filter(restaurant__owner=user)
     

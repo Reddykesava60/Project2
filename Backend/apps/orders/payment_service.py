@@ -83,6 +83,24 @@ class RazorpayService:
         Returns:
             Razorpay order object with 'id', 'amount', 'currency', etc.
         """
+        # Check for simulation mode (RAZORPAY_FORCE_SUCCESS)
+        from django.conf import settings
+        force_success = getattr(settings, 'RAZORPAY_FORCE_SUCCESS', False)
+        
+        if force_success:
+            # Simulation mode: return a fake Razorpay order
+            import uuid
+            fake_order_id = f"order_sim_{uuid.uuid4().hex[:16]}"
+            logger.info(f"[SIMULATION] Created fake Razorpay order: {fake_order_id}")
+            return {
+                'id': fake_order_id,
+                'amount': amount,
+                'currency': currency,
+                'receipt': receipt,
+                'notes': notes or {},
+                'status': 'created',
+            }
+        
         try:
             order_data = {
                 'amount': amount,
@@ -106,10 +124,16 @@ class RazorpayService:
         razorpay_signature: str
     ) -> bool:
         """
-        Verify Razorpay payment signature.
+        Verify Razorpay payment signature using the official Razorpay SDK.
         
         This is the CRITICAL step that ensures payment was actually successful.
         Never trust client-side payment success without this verification.
+        
+        The SDK's client.utility.verify_payment_signature() performs:
+        1. Constructs the message: "{order_id}|{payment_id}"
+        2. Computes HMAC-SHA256 with the key_secret
+        3. Timing-safe comparison with the provided signature
+        4. Raises SignatureVerificationError if verification fails
         
         Args:
             razorpay_order_id: Order ID from Razorpay
@@ -122,34 +146,52 @@ class RazorpayService:
         Raises:
             PaymentVerificationError if signature is invalid
         """
+        from django.conf import settings
+        from razorpay.errors import SignatureVerificationError
+        
+        # Check if we're in simulation mode (for testing only - NEVER in production)
+        force_success = getattr(settings, 'RAZORPAY_FORCE_SUCCESS', False)
+        live_mode = getattr(settings, 'RAZORPAY_LIVE_MODE', True)  # Default to LIVE for safety
+        
+        if force_success and not live_mode:
+            # Simulation mode: accept any signature for testing
+            logger.warning(
+                f"[SIMULATION] Skipping signature verification for payment: {razorpay_payment_id}. "
+                "NEVER enable RAZORPAY_FORCE_SUCCESS in production!"
+            )
+            return True
+        
         try:
-            # Construct the message
-            message = f"{razorpay_order_id}|{razorpay_payment_id}"
+            # Use the official Razorpay SDK for cryptographic verification
+            # This is the ONLY trusted way to verify payment authenticity
+            params = {
+                'razorpay_order_id': razorpay_order_id,
+                'razorpay_payment_id': razorpay_payment_id,
+                'razorpay_signature': razorpay_signature,
+            }
             
-            # Generate expected signature
-            expected_signature = hmac.new(
-                self.key_secret.encode('utf-8'),
-                message.encode('utf-8'),
-                hashlib.sha256
-            ).hexdigest()
+            # SDK's verify_payment_signature raises SignatureVerificationError if invalid
+            self.client.utility.verify_payment_signature(params)
             
-            # Timing-safe comparison
-            if hmac.compare_digest(expected_signature, razorpay_signature):
-                logger.info(f"Payment verified: {razorpay_payment_id}")
-                return True
-            else:
-                logger.warning(f"Payment signature mismatch: {razorpay_payment_id}")
-                raise PaymentVerificationError("Invalid payment signature")
-                
-        except PaymentVerificationError:
-            raise
+            logger.info(f"Payment cryptographically verified via SDK: {razorpay_payment_id}")
+            return True
+            
+        except SignatureVerificationError as e:
+            logger.warning(
+                f"Payment signature verification FAILED: {razorpay_payment_id}. "
+                f"Order: {razorpay_order_id}. Error: {e}"
+            )
+            raise PaymentVerificationError("Invalid payment signature - payment not verified by Razorpay")
         except Exception as e:
             logger.error(f"Payment verification error: {e}")
             raise PaymentVerificationError(f"Verification failed: {e}")
     
     def verify_webhook_signature(self, body: bytes, signature: str) -> bool:
         """
-        Verify Razorpay webhook signature.
+        Verify Razorpay webhook signature using the official Razorpay SDK.
+        
+        Webhooks must be verified to ensure they are genuinely from Razorpay.
+        This uses client.utility.verify_webhook_signature() from the SDK.
         
         Args:
             body: Raw request body bytes
@@ -157,17 +199,43 @@ class RazorpayService:
             
         Returns:
             True if signature is valid
+            
+        Raises:
+            PaymentVerificationError if signature is invalid
         """
+        from django.conf import settings
+        from razorpay.errors import SignatureVerificationError
+        
         if not self.webhook_secret:
-            raise PaymentServiceError("Webhook secret not configured")
+            raise PaymentServiceError("Webhook secret not configured (RAZORPAY_WEBHOOK_SECRET)")
         
-        expected_signature = hmac.new(
-            self.webhook_secret.encode('utf-8'),
-            body,
-            hashlib.sha256
-        ).hexdigest()
+        # Check if we're in simulation mode
+        force_success = getattr(settings, 'RAZORPAY_FORCE_SUCCESS', False)
+        live_mode = getattr(settings, 'RAZORPAY_LIVE_MODE', True)
         
-        return hmac.compare_digest(expected_signature, signature)
+        if force_success and not live_mode:
+            logger.warning("[SIMULATION] Skipping webhook signature verification")
+            return True
+        
+        try:
+            # Convert body to string if bytes (SDK expects string)
+            body_str = body.decode('utf-8') if isinstance(body, bytes) else body
+            
+            # Use SDK's verify_webhook_signature for cryptographic verification
+            self.client.utility.verify_webhook_signature(
+                body_str,
+                signature,
+                self.webhook_secret
+            )
+            logger.info("Webhook signature verified via SDK")
+            return True
+            
+        except SignatureVerificationError as e:
+            logger.warning(f"Webhook signature verification FAILED: {e}")
+            raise PaymentVerificationError("Invalid webhook signature")
+        except Exception as e:
+            logger.error(f"Webhook verification error: {e}")
+            raise PaymentVerificationError(f"Webhook verification failed: {e}")
     
     def fetch_payment(self, payment_id: str) -> dict:
         """
@@ -251,27 +319,24 @@ def process_order_payment(order, razorpay_payment_id: str, razorpay_order_id: st
         Tuple of (success: bool, message: str)
     """
     try:
-        # In local development/test mode we allow forcing payment success
-        # without talking to Razorpay, while keeping the same order state
-        # transitions. This is controlled via RAZORPAY_FORCE_SUCCESS and
-        # should NEVER be enabled in production.
-        force_success = getattr(settings, 'RAZORPAY_FORCE_SUCCESS', False)
-
-        if not force_success:
-            # Verify the payment signature against Razorpay
-            razorpay_service.verify_payment_signature(
-                razorpay_order_id,
-                razorpay_payment_id,
-                razorpay_signature
-            )
+        # ALWAYS verify the payment signature via the service.
+        # The service internally handles RAZORPAY_LIVE_MODE and RAZORPAY_FORCE_SUCCESS.
+        # This ensures a single source of truth for payment verification.
+        razorpay_service.verify_payment_signature(
+            razorpay_order_id,
+            razorpay_payment_id,
+            razorpay_signature
+        )
         
         # Update order atomically
         with transaction.atomic():
             order.refresh_from_db()
             order.payment_id = razorpay_payment_id
-            order.payment_status = 'SUCCESS'
-            if order.status == 'AWAITING_PAYMENT':
-                order.status = 'PREPARING'
+            order.payment_status = 'success'  # Lowercase per PRD
+            # Payment confirmed -> preparing
+            # Historically some flows used AWAITING_PAYMENT; treat both as unpaid.
+            if order.status in ('pending', 'PENDING', 'AWAITING_PAYMENT'):
+                order.status = 'preparing'  # Lowercase per PRD
             order.save(update_fields=[
                 'payment_id', 'payment_status', 'status', 'updated_at', 'version'
             ])
@@ -283,8 +348,8 @@ def process_order_payment(order, razorpay_payment_id: str, razorpay_order_id: st
         
         with transaction.atomic():
             order.refresh_from_db()
-            order.payment_status = 'FAILED'
-            order.status = 'FAILED'
+            order.payment_status = 'failed'  # Lowercase
+            order.status = 'failed'  # Mark order as failed
             order.save(update_fields=['payment_status', 'status', 'updated_at', 'version'])
         
         return False, str(e)

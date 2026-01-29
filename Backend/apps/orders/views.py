@@ -46,23 +46,37 @@ class OrderViewSet(viewsets.ModelViewSet):
     filterset_fields = ['restaurant', 'status', 'payment_method', 'order_type']
     
     def get_queryset(self):
-        """Return tenant-scoped queryset."""
+        """Return tenant-scoped queryset with proper visibility rules.
+        
+        Visibility rules:
+        - Platform admin: All orders
+        - Owner: All orders for their restaurants
+        - Staff with can_collect_cash: pending + preparing orders
+        - Staff without can_collect_cash: preparing orders only
+        """
         user = self.request.user
         
-        if user.role == 'platform_admin':
+        if user.role in ['platform_admin', 'ADMIN']:
             return Order.objects.all()
         
-        if user.role == 'restaurant_owner':
+        if user.role in ['restaurant_owner', 'OWNER']:
             return Order.objects.filter(restaurant__owner=user)
         
-        if user.role == 'staff':
-            # Staff only sees active/pending orders (not completed/cancelled)
-            active_statuses = ['PENDING', 'AWAITING_PAYMENT', 'PREPARING', 'READY']
+        if user.role in ['staff', 'STAFF']:
             staff_profile = getattr(user, 'staff_profile', None)
             if staff_profile and staff_profile.restaurant:
+                # Staff visibility: pending (cash staff only) + preparing (all staff)
+                # Never show completed orders to staff
+                if staff_profile.can_collect_cash:
+                    # Cash staff can see pending orders (to collect payment)
+                    visible_statuses = ['pending', 'preparing']
+                else:
+                    # Non-cash staff only see preparing orders
+                    visible_statuses = ['preparing']
+                
                 return Order.objects.filter(
                     restaurant=staff_profile.restaurant,
-                    status__in=active_statuses
+                    status__in=visible_statuses
                 )
         
         return Order.objects.none()
@@ -107,7 +121,7 @@ class OrderViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def active(self, request):
         """Get active (non-completed) orders."""
-        active_statuses = ['PENDING', 'AWAITING_PAYMENT', 'PREPARING', 'READY']
+        active_statuses = ['pending', 'preparing']
         queryset = self.get_queryset().filter(status__in=active_statuses)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
@@ -116,10 +130,24 @@ class OrderViewSet(viewsets.ModelViewSet):
     def update_status(self, request, pk=None):
         """
         Update order status with proper validation.
-        Frontend sends: {status: 'COMPLETED'} or other status values.
+        
+        PRD Rules:
+        - Only valid transitions: pending -> preparing -> completed
+        - Completed orders can NEVER be edited
+        - Payment must be successful before preparing/completing
         """
         order = self.get_object()
         old_status = order.status
+        
+        # RULE: Completed orders cannot be modified
+        if order.status == 'completed':
+            return Response(
+                {
+                    'error': 'ORDER_COMPLETED',
+                    'message': 'Completed orders cannot be modified.'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # Get status from request
         new_status_str = request.data.get('status')
@@ -132,33 +160,47 @@ class OrderViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Convert to uppercase to match model choices
-        new_status_str = new_status_str.upper()
+        # Normalize to lowercase (model uses lowercase)
+        new_status_str = new_status_str.lower()
         
-        # Map frontend status to backend status
-        status_mapping = {
-            'COMPLETED': Order.Status.COMPLETED,
-            'PENDING': Order.Status.PENDING,
-            'PREPARING': Order.Status.PREPARING,
-            'READY': Order.Status.READY,
-            'CANCELLED': Order.Status.CANCELLED,
-        }
-        
-        if new_status_str not in status_mapping:
+        # Only allow valid statuses per PRD: pending, preparing, completed
+        valid_statuses = ['pending', 'preparing', 'completed']
+        if new_status_str not in valid_statuses:
             return Response(
                 {
                     'error': 'INVALID_STATUS',
-                    'message': f'Invalid status: {new_status_str}'
+                    'message': f'Invalid status: {new_status_str}. Must be one of: {valid_statuses}'
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        new_status = status_mapping[new_status_str]
+        # Validate transition using model's rules
+        if not order.can_transition_to(new_status_str):
+            return Response(
+                {
+                    'error': 'INVALID_STATUS_TRANSITION',
+                    'message': f'Cannot transition from {order.status} to {new_status_str}.'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        # Special handling for COMPLETED status - use complete() logic
-        if new_status == Order.Status.COMPLETED:
-            # Check payment status
-            if order.payment_status != Order.PaymentStatus.SUCCESS:
+        # Handle preparing transition
+        if new_status_str == 'preparing':
+            # Payment must be successful first
+            if order.payment_status != 'success':
+                return Response(
+                    {
+                        'error': 'PAYMENT_NOT_COMPLETE',
+                        'message': 'Order cannot be prepared until payment is successful.'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            order.mark_as_preparing(user=request.user)
+        
+        # Handle completed transition
+        elif new_status_str == 'completed':
+            # Payment must be successful
+            if order.payment_status != 'success':
                 return Response(
                     {
                         'error': 'PAYMENT_NOT_COMPLETE',
@@ -166,28 +208,6 @@ class OrderViewSet(viewsets.ModelViewSet):
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
-            # Check if already completed
-            if order.status == Order.Status.COMPLETED:
-                return Response(
-                    {
-                        'error': 'ORDER_ALREADY_COMPLETED',
-                        'message': 'This order has already been completed.'
-                    },
-                    status=status.HTTP_409_CONFLICT
-                )
-            
-            # Validate status transition
-            if not order.can_transition_to(Order.Status.COMPLETED):
-                return Response(
-                    {
-                        'error': 'INVALID_STATUS_TRANSITION',
-                        'message': f'Cannot complete order from status {order.status}.'
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            # Complete the order
             order.mark_as_completed(user=request.user)
             
             # Audit log
@@ -202,21 +222,12 @@ class OrderViewSet(viewsets.ModelViewSet):
                 request=request
             )
         else:
-            # For other status changes, use standard validation
-            if not order.can_transition_to(new_status):
-                return Response(
-                    {
-                        'error': 'INVALID_STATUS_TRANSITION',
-                        'message': f'Cannot transition from {order.status} to {new_status}.'
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            # Update status
-            order.status = new_status
+            # For other transitions (shouldn't happen with current rules)
+            order.status = new_status_str
             order.save(update_fields=['status', 'updated_at', 'version'])
-            
-            # Audit log
+        
+        # Audit log for status change
+        if new_status_str != 'completed':  # Already logged above for completed
             create_audit_log(
                 action=AuditLog.Action.ORDER_STATUS_CHANGE,
                 user=request.user,
@@ -237,10 +248,15 @@ class OrderViewSet(viewsets.ModelViewSet):
         """
         Collect cash payment for an order.
         Only allowed for users with can_collect_cash permission.
+        
+        PRD Rules:
+        - Only staff with can_collect_cash can confirm cash
+        - Only pending cash orders can have payment collected
         """
         order = self.get_object()
         
-        if order.payment_method != 'CASH':
+        # Must be a cash order
+        if order.payment_method != 'cash':
             return Response(
                 {
                     'error': 'NOT_CASH_ORDER',
@@ -249,13 +265,24 @@ class OrderViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        if order.payment_status == 'SUCCESS':
+        # Cannot collect twice
+        if order.payment_status == 'success':
             return Response(
                 {
                     'error': 'ALREADY_COLLECTED',
                     'message': 'Payment has already been collected.'
                 },
                 status=status.HTTP_409_CONFLICT
+            )
+
+        # Only pending cash orders can have payment collected
+        if order.status != 'pending':
+            return Response(
+                {
+                    'error': 'INVALID_ORDER_STATUS',
+                    'message': f'Cannot collect cash when order status is {order.status}.'
+                },
+                status=status.HTTP_400_BAD_REQUEST
             )
         
         serializer = CollectPaymentSerializer(context={'request': request})
@@ -281,12 +308,12 @@ class OrderViewSet(viewsets.ModelViewSet):
     def complete(self, request, pk=None):
         """
         Complete an order.
-        Order must have payment_status = SUCCESS before completion.
+        Order must have payment_status = success before completion.
         """
         order = self.get_object()
         
         # Check payment status
-        if order.payment_status != Order.PaymentStatus.SUCCESS:
+        if order.payment_status != 'success':
             return Response(
                 {
                     'error': 'PAYMENT_NOT_COMPLETE',
@@ -296,7 +323,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             )
         
         # Check if already completed
-        if order.status == Order.Status.COMPLETED:
+        if order.status == 'completed':
             return Response(
                 {
                     'error': 'ORDER_ALREADY_COMPLETED',
@@ -306,7 +333,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             )
         
         # Validate status transition
-        if not order.can_transition_to(Order.Status.COMPLETED):
+        if not order.can_transition_to('completed'):
             return Response(
                 {
                     'error': 'INVALID_STATUS_TRANSITION',
@@ -373,9 +400,9 @@ class OrderViewSet(viewsets.ModelViewSet):
         user = request.user
         restaurant = None
         
-        if user.role == 'restaurant_owner':
+        if user.role in ['restaurant_owner', 'OWNER']:
             restaurant = user.owned_restaurants.first()
-        elif user.role == 'staff':
+        elif user.role in ['staff', 'STAFF']:
             # Staff users have restaurant via staff_profile
             staff_profile = getattr(user, 'staff_profile', None)
             if staff_profile and staff_profile.restaurant:
@@ -492,7 +519,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                 )
         
         # Check if order is already completed (QR is single-use)
-        if order.status == Order.Status.COMPLETED:
+        if order.status == 'completed':
             return Response(
                 {
                     'error': 'ORDER_ALREADY_COMPLETED',
@@ -528,7 +555,7 @@ class StaffCreateOrderView(generics.CreateAPIView):
         context = super().get_serializer_context()
         
         user = self.request.user
-        if user.role == 'restaurant_owner':
+        if user.role in ['restaurant_owner', 'OWNER']:
             restaurant_id = self.request.data.get('restaurant')
             if restaurant_id:
                 try:
@@ -538,7 +565,7 @@ class StaffCreateOrderView(generics.CreateAPIView):
                     )
                 except Restaurant.DoesNotExist:
                     pass
-        elif user.role == 'staff':
+        elif user.role in ['staff', 'STAFF']:
             # Staff users have restaurant via staff_profile
             staff_profile = getattr(user, 'staff_profile', None)
             if staff_profile and staff_profile.restaurant:
@@ -604,8 +631,8 @@ class DashboardStatsView(APIView):
         today = timezone.now().date()
         yesterday = today - timedelta(days=1)
         
-        # Active orders (all time - matches staff view)
-        active_statuses = ['PENDING', 'AWAITING_PAYMENT', 'PREPARING', 'READY']
+        # Active orders (all time) - lowercase status values
+        active_statuses = ['pending', 'preparing']
         all_active_orders = Order.objects.filter(
             restaurant=restaurant,
             status__in=active_statuses
@@ -621,11 +648,12 @@ class DashboardStatsView(APIView):
             created_at__date=yesterday
         )
         
-        today_completed = today_orders.filter(status='COMPLETED')
-        yesterday_completed = yesterday_orders.filter(status='COMPLETED')
-        
-        today_revenue = sum(o.total_amount for o in today_completed)
-        yesterday_revenue = sum(o.total_amount for o in yesterday_completed)
+        # Revenue must match DB: only completed orders with successful payment
+        today_completed = today_orders.filter(status='completed', payment_status='success')
+        yesterday_completed = yesterday_orders.filter(status='completed', payment_status='success')
+
+        today_revenue = today_completed.aggregate(total=Sum('total_amount'))['total'] or 0
+        yesterday_revenue = yesterday_completed.aggregate(total=Sum('total_amount'))['total'] or 0
         
         # Calculate trends
         orders_trend = 0
@@ -633,12 +661,12 @@ class DashboardStatsView(APIView):
             orders_trend = ((today_orders.count() - yesterday_orders.count()) / yesterday_orders.count()) * 100
         
         revenue_trend = 0
-        if yesterday_revenue > 0:
+        if float(yesterday_revenue) > 0:
             revenue_trend = ((float(today_revenue) - float(yesterday_revenue)) / float(yesterday_revenue)) * 100
         
-        # Calculate cash vs online breakdown
-        today_cash_revenue = sum(o.total_amount for o in today_completed.filter(payment_method='CASH'))
-        today_online_revenue = sum(o.total_amount for o in today_completed.filter(payment_method='ONLINE'))
+        # Calculate cash vs upi breakdown (lowercase values)
+        today_cash_revenue = today_completed.filter(payment_method='cash').aggregate(total=Sum('total_amount'))['total'] or 0
+        today_upi_revenue = today_completed.filter(payment_method='upi').aggregate(total=Sum('total_amount'))['total'] or 0
         
         # Calculate orders by hour for today
         from django.db.models.functions import TruncHour
@@ -656,7 +684,7 @@ class DashboardStatsView(APIView):
         return Response({
             # Active orders (all time - matches staff active orders count)
             'active_orders': all_active_orders.count(),
-            'pending_orders': all_active_orders.count(),  # Alias for frontend compatibility
+            'pending_orders': all_active_orders.filter(status='pending').count(),
             
             # Today's stats
             'today_orders': today_orders.count(),
@@ -666,7 +694,8 @@ class DashboardStatsView(APIView):
             # Revenue
             'today_revenue': float(today_revenue),
             'cash_revenue': float(today_cash_revenue),
-            'online_revenue': float(today_online_revenue),
+            'upi_revenue': float(today_upi_revenue),
+            'online_revenue': float(today_upi_revenue),  # Alias for frontend compatibility
             
             # Trends
             'orders_trend': round(orders_trend, 1),

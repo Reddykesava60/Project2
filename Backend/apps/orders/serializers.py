@@ -22,7 +22,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
         model = OrderItem
         fields = [
             'id', 'menu_item', 'menu_item_id', 'menu_item_name',
-            'price_at_order', 'unit_price', 'quantity', 'subtotal', 'total_price', 'notes',
+            'price_at_order', 'unit_price', 'quantity', 'subtotal', 'total_price', 'notes', 'attributes',
         ]
         read_only_fields = ['id', 'menu_item_name', 'price_at_order', 'subtotal', 'unit_price', 'total_price', 'menu_item_id']
 
@@ -47,6 +47,9 @@ class CashAuditLogSerializer(serializers.ModelSerializer):
 class OrderSerializer(serializers.ModelSerializer):
     """
     Full order serializer for owners/staff.
+    
+    IMPORTANT: This serializer is READ-ONLY for sensitive fields.
+    Frontend can NEVER set: payment_status, status (use dedicated endpoints)
     
     Note: Frontend may use 'order_status' or 'status' interchangeably.
     We include both for compatibility.
@@ -88,9 +91,10 @@ class OrderSerializer(serializers.ModelSerializer):
             'id', 'restaurant', 'restaurant_name',
             'order_number', 'daily_order_number', 'daily_sequence', 'order_type',
             'customer_name', 'table_number',
-            'status', 'order_status',  # Both for frontend compat (status is uppercase, order_status is lowercase)
-            'payment_method', 'payment_status',  # Uppercase in DB, frontend expects lowercase
-            'subtotal', 'tax', 'total', 'total_amount',  # Both 'total' and 'total_amount' for frontend compat
+            'is_parcel', 'spicy_level',  # Order preferences
+            'status', 'order_status',  # Both for frontend compat
+            'payment_method', 'payment_status',  # READ-ONLY - frontend cannot set these
+            'subtotal', 'tax', 'total', 'total_amount',
             'items',
             'created_by', 'created_by_name', 'completed_by',
             'cash_collected_by', 'cash_collected_by_name',
@@ -98,15 +102,21 @@ class OrderSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at', 'completed_at',
             'version', 'qr_signature',
         ]
+        # ALL fields are read-only - status changes must use dedicated endpoints
         read_only_fields = [
-            'id', 'restaurant', 'order_number', 'daily_sequence', 'daily_order_number',
+            'id', 'restaurant', 'restaurant_name',
+            'order_number', 'daily_order_number', 'daily_sequence', 'order_type',
+            'customer_name', 'table_number',
+            'is_parcel', 'spicy_level',
+            'status', 'order_status',  # CRITICAL: Frontend cannot set status
+            'payment_method', 'payment_status',  # CRITICAL: Frontend cannot set payment_status
             'subtotal', 'tax', 'total', 'total_amount',
+            'items',
             'created_by', 'created_by_name', 'completed_by',
             'cash_collected_by', 'cash_collected_by_name',
             'cash_collected_at', 'cash_collected_ip',
             'created_at', 'updated_at', 'completed_at',
-            'version', 'order_status', 'restaurant_name', 'payment_method', 'payment_status',
-            'qr_signature', 'items',
+            'version', 'qr_signature',
         ]
 
 
@@ -119,14 +129,26 @@ class OrderItemCreateSerializer(serializers.Serializer):
 
 
 class OrderCreateSerializer(serializers.Serializer):
-    """Serializer for creating orders (public/customer)."""
+    """Serializer for creating orders (public/customer).
+    
+    IMPORTANT: Customer can select payment_method but NEVER payment_status.
+    Orders always start with payment_status='pending'.
+    """
     
     customer_name = serializers.CharField(max_length=100)
     table_number = serializers.CharField(max_length=20, required=False, allow_blank=True)
-    payment_method = serializers.ChoiceField(choices=['CASH', 'ONLINE'])
+    # PRD: payment_method must be cash or upi (lowercase)
+    payment_method = serializers.ChoiceField(choices=['cash', 'upi'])
     items = OrderItemCreateSerializer(many=True, min_length=1)
     privacy_accepted = serializers.BooleanField()
     qr_signature = serializers.CharField(required=False, allow_blank=True)
+    # Order preferences
+    is_parcel = serializers.BooleanField(required=False, default=False)
+    spicy_level = serializers.ChoiceField(
+        choices=['normal', 'medium', 'high'],
+        required=False,
+        default='normal'
+    )
     
     def validate_privacy_accepted(self, value):
         if not value:
@@ -179,13 +201,13 @@ class OrderCreateSerializer(serializers.Serializer):
         # Calculate tax
         tax = subtotal * restaurant.tax_rate
         total_amount = subtotal + tax
+ 
+        # PRD Rules:
+        # - All new orders start with status='pending' and payment_status='pending'
+        # - Status transitions: pending -> preparing -> completed
+        # - payment_status can only be set by backend (collect_payment or payment webhook)
         
-        # Determine initial status
-        initial_status = Order.Status.PENDING
-        if validated_data['payment_method'] == 'CASH':
-            initial_status = Order.Status.AWAITING_PAYMENT
-        
-        # Create order
+        # Create order with lowercase status values
         order = Order.objects.create(
             restaurant=restaurant,
             order_number=order_number,
@@ -193,9 +215,12 @@ class OrderCreateSerializer(serializers.Serializer):
             order_type=Order.OrderType.QR_CUSTOMER,
             customer_name=validated_data['customer_name'],
             table_number=validated_data.get('table_number', ''),
+            is_parcel=validated_data.get('is_parcel', False),
+            spicy_level=validated_data.get('spicy_level', 'normal'),
             qr_signature=validated_data.get('qr_signature', ''),
-            status=initial_status,
-            payment_method=validated_data['payment_method'],
+            status='pending',  # Always start pending
+            payment_method=validated_data['payment_method'],  # Already lowercase from choices
+            payment_status='pending',  # Always start pending - NEVER set by frontend
             subtotal=subtotal,
             tax=tax,
             total_amount=total_amount,
@@ -258,24 +283,24 @@ class StaffOrderCreateSerializer(serializers.Serializer):
         
         # Get client IP
         ip_address = self.get_client_ip()
-        
-        # Create order (staff orders are cash, already paid)
+
+        # PRD Rules:
+        # - Staff-created cash orders MUST start as pending
+        # - Payment is only confirmed when a can_collect_cash staff member collects it
+        # - Use lowercase status values
         order = Order.objects.create(
             restaurant=restaurant,
             order_number=order_number,
             daily_sequence=daily_sequence,
             order_type=Order.OrderType.STAFF_CASH,
             customer_name=validated_data.get('customer_name', ''),
-            status=Order.Status.PREPARING,  # Skip payment step
-            payment_method=Order.PaymentMethod.CASH,
-            payment_status=Order.PaymentStatus.SUCCESS,  # Assumed paid
+            status='pending',  # Lowercase per PRD
+            payment_method='cash',  # Lowercase per PRD
+            payment_status='pending',  # Lowercase per PRD - NEVER set by frontend
             subtotal=subtotal,
             tax=tax,
             total_amount=total_amount,
             created_by=user,
-            cash_collected_by=user,
-            cash_collected_at=timezone.now(),
-            cash_collected_ip=ip_address,
         )
         
         # Create order items
@@ -307,24 +332,43 @@ class StaffOrderCreateSerializer(serializers.Serializer):
 
 
 class OrderStatusUpdateSerializer(serializers.Serializer):
-    """Serializer for updating order status."""
+    """Serializer for updating order status.
     
-    status = serializers.ChoiceField(choices=[
-        'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'
-    ])
+    PRD Rules:
+    - Only valid statuses: pending, preparing, completed (lowercase)
+    - Only valid transitions: pending -> preparing -> completed
+    - Completed orders can NEVER be edited
+    """
+    
+    # Only allow valid statuses per PRD (lowercase)
+    status = serializers.ChoiceField(choices=['preparing', 'completed'])
+    
+    def validate(self, attrs):
+        order = self.instance
+        new_status = attrs['status']
+        
+        # RULE: Completed orders cannot be modified
+        if order and order.status == 'completed':
+            raise serializers.ValidationError(
+                {'status': 'Completed orders cannot be modified.'}
+            )
+        
+        # Validate transition
+        if order and not order.can_transition_to(new_status):
+            raise serializers.ValidationError(
+                {'status': f'Cannot transition from {order.status} to {new_status}.'}
+            )
+        
+        return attrs
     
     def update(self, order, validated_data):
         new_status = validated_data['status']
         user = self.context['request'].user
         
-        if new_status == 'PREPARING':
+        if new_status == 'preparing':
             order.mark_as_preparing(user)
-        elif new_status == 'READY':
-            order.mark_as_ready(user)
-        elif new_status == 'COMPLETED':
+        elif new_status == 'completed':
             order.mark_as_completed(user)
-        elif new_status == 'CANCELLED':
-            order.mark_as_cancelled(user)
         
         return order
 

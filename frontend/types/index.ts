@@ -116,20 +116,16 @@ export interface MenuItem {
   updatedAt: string
 }
 
-// Order Types
-export type PaymentMethod = 'CASH' | 'ONLINE'
-export type PaymentStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'REFUNDED'
-export type OrderStatus = 'PENDING' | 'AWAITING_PAYMENT' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED' | 'FAILED'
+// Order Types - MUST match backend lowercase values
+export type PaymentMethod = 'cash' | 'upi'
+export type PaymentStatus = 'pending' | 'success'
+export type OrderStatus = 'pending' | 'preparing' | 'completed'
 
-// Order status transitions (for validation)
+// Order status transitions (for validation) - matches backend state machine
 export const ALLOWED_ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  'PENDING': ['PREPARING', 'AWAITING_PAYMENT', 'FAILED', 'CANCELLED'],
-  'AWAITING_PAYMENT': ['PREPARING', 'CANCELLED'],
-  'PREPARING': ['READY', 'CANCELLED'],
-  'READY': ['COMPLETED', 'CANCELLED'],
-  'COMPLETED': [],
-  'CANCELLED': [],
-  'FAILED': ['PENDING'],
+  'pending': ['preparing'],
+  'preparing': ['completed'],
+  'completed': [],
 }
 
 export interface OrderItem {
@@ -150,7 +146,7 @@ export interface Order {
   restaurantName?: string
 
   // Order type
-  orderType: 'QR_CUSTOMER' | 'STAFF_CASH'
+  orderType: 'qr_customer' | 'staff_cash'
 
   // Customer info (optional for staff orders)
   customerName?: string

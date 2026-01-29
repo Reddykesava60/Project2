@@ -11,6 +11,8 @@ from .public_views import (
     PublicOrderDetailView,
     CreatePaymentOrderView,
     VerifyPaymentView,
+    InitiateUPIPaymentView,
+    VerifyUPIPaymentView,
     RazorpayWebhookView,
 )
 
@@ -21,7 +23,7 @@ urlpatterns = [
     # Public menu
     path('r/<slug:slug>/menu/', PublicMenuView.as_view(), name='public-menu'),
     
-    # Create order
+    # Create order (CASH only - UPI must use payment/initiate flow)
     path('r/<slug:slug>/order/', PublicOrderCreateView.as_view(), name='public-order-create'),
     
     # Order detail (full info for confirmation page)
@@ -30,7 +32,13 @@ urlpatterns = [
     # Order status (limited info)
     path('r/<slug:slug>/order/<uuid:order_id>/status/', PublicOrderStatusView.as_view(), name='public-order-status'),
     
-    # Payment endpoints
+    # NEW UPI Payment flow (no order created until payment verified)
+    # Step 1: Initiate payment - validates cart, creates Razorpay order, returns payment_token
+    path('r/<slug:slug>/payment/initiate/', InitiateUPIPaymentView.as_view(), name='initiate-upi-payment'),
+    # Step 2: Verify payment - verifies signature, creates order ONLY if successful
+    path('r/<slug:slug>/payment/verify/', VerifyUPIPaymentView.as_view(), name='verify-upi-payment'),
+    
+    # DEPRECATED: Legacy payment endpoints (for backward compatibility)
     path('r/<slug:slug>/order/<uuid:order_id>/payment/create/', CreatePaymentOrderView.as_view(), name='create-payment-order'),
     path('r/<slug:slug>/order/<uuid:order_id>/payment/verify/', VerifyPaymentView.as_view(), name='verify-payment'),
     

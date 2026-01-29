@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Order, OrderStatus } from '@/types'
+import { orderApi } from '@/lib/api'
 
 interface UseOrdersOptions {
   restaurantId?: string
@@ -42,19 +43,23 @@ export function useOrders(options: UseOrdersOptions = {}): UseOrdersReturn {
 
     try {
       // Build query params
-      const params = new URLSearchParams()
-      if (restaurantId) params.append('restaurant_id', restaurantId)
-      if (status) {
-        const statusArray = Array.isArray(status) ? status : [status]
-        statusArray.forEach(s => params.append('status', s))
+      if (!restaurantId) {
+        setOrders([])
+        setLastUpdated(new Date())
+        setError(null)
+        return
       }
 
-      // In production, this would be an actual API call
-      // const response = await fetch(`/api/orders?${params.toString()}`)
-      // const data = await response.json()
-      // setOrders(data.orders)
+      const response = await orderApi.getAll(restaurantId)
+      const apiOrders = (response.success && Array.isArray(response.data) ? response.data : []) as any[]
 
-      // For now, just trigger a state update to simulate refresh
+      // Optional client-side status filter (backend already enforces staff scoping)
+      const statusArray = status ? (Array.isArray(status) ? status : [status]) : []
+      const filtered = statusArray.length
+        ? apiOrders.filter((o) => statusArray.includes((o.status || '').toLowerCase()))
+        : apiOrders
+
+      setOrders(filtered as Order[])
       setLastUpdated(new Date())
       setError(null)
     } catch (err) {
@@ -176,7 +181,7 @@ export function useOrderNotifications() {
     playNotificationSound()
     showBrowserNotification(
       `New Order #${order.orderNumber}`,
-      `${order.items.length} items - ${order.paymentMethod === 'CASH' ? 'Cash' : 'Online'}`
+      `${order.items.length} items - ${order.paymentMethod === 'cash' ? 'Cash' : 'UPI'}`
     )
   }, [playNotificationSound, showBrowserNotification])
 

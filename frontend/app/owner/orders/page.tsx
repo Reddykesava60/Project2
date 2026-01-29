@@ -44,12 +44,12 @@ export default function OwnerOrdersPage() {
     ? ordersDataResponse
     : (ordersDataResponse as any)?.results || []) as Order[];
 
-  // Separate active and completed orders
+  // Separate active and completed orders (backend only has pending/preparing/completed)
   const activeOrders = orders.filter(
-    (o) => o.status === 'pending' || o.status === 'preparing' || o.status === 'ready'
+    (o) => o.status === 'pending' || o.status === 'preparing'
   );
   const completedOrders = orders.filter(
-    (o) => o.status === 'completed' || o.status === 'cancelled'
+    (o) => o.status === 'completed'
   );
 
   const currentOrders = activeTab === 'active' ? activeOrders : completedOrders;
@@ -133,12 +133,10 @@ export default function OwnerOrdersPage() {
                 <>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="preparing">Preparing</SelectItem>
-                  <SelectItem value="ready">Ready</SelectItem>
                 </>
               ) : (
                 <>
                   <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
                 </>
               )}
             </SelectContent>

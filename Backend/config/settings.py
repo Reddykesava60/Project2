@@ -21,7 +21,7 @@ if SECRET_KEY is None:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)  # Default to False for safety
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,testserver', cast=Csv())
 
 # Application definition
 INSTALLED_APPS = [
@@ -52,6 +52,8 @@ MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    # Daily cleanup for stale pending cash orders (tenant-scoped, idempotent)
+    'apps.orders.middleware.PendingCashOrderCleanupMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -89,7 +91,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
 # Database Configuration
-if config('USE_SQLITE', default=False, cast=bool):
+if config('USE_SQLITE', default=True, cast=bool):
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -162,14 +164,15 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-    'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',
-        'rest_framework.throttling.UserRateThrottle',
-    ],
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/hour',
-        'user': '1000/hour',
-    },
+    # Throttling disabled for E2E testing - re-enable in production
+    # 'DEFAULT_THROTTLE_CLASSES': [
+    #     'rest_framework.throttling.AnonRateThrottle',
+    #     'rest_framework.throttling.UserRateThrottle',
+    # ],
+    # 'DEFAULT_THROTTLE_RATES': {
+    #     'anon': '100/hour',
+    #     'user': '1000/hour',
+    # },
     # Custom exception handler for consistent error responses
     'EXCEPTION_HANDLER': 'apps.core.exceptions.custom_exception_handler',
 }
@@ -206,6 +209,24 @@ DEFAULT_CURRENCY = config('DEFAULT_CURRENCY', default='INR')
 RAZORPAY_KEY_ID = config('RAZORPAY_KEY_ID', default='')
 RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET', default='')
 RAZORPAY_WEBHOOK_SECRET = config('RAZORPAY_WEBHOOK_SECRET', default='')
+
+# RAZORPAY_LIVE_MODE: When True (default), uses REAL Razorpay cryptographic verification.
+# When False, allows simulation mode if RAZORPAY_FORCE_SUCCESS is also True.
+# CRITICAL: Always set to True in production!
+RAZORPAY_LIVE_MODE = config('RAZORPAY_LIVE_MODE', default=True, cast=bool)
+
+# RAZORPAY_FORCE_SUCCESS: Testing only! When True AND RAZORPAY_LIVE_MODE=False,
+# skips signature verification. NEVER enable in production!
+RAZORPAY_FORCE_SUCCESS = config('RAZORPAY_FORCE_SUCCESS', default=False, cast=bool)
+
+# Safety check: Warn if simulation mode is enabled
+if RAZORPAY_FORCE_SUCCESS and not RAZORPAY_LIVE_MODE:
+    import warnings
+    warnings.warn(
+        "RAZORPAY_FORCE_SUCCESS=True with RAZORPAY_LIVE_MODE=False enables payment simulation. "
+        "NEVER use this in production!",
+        RuntimeWarning
+    )
 
 # Validate payment config in production
 if not DEBUG and RAZORPAY_KEY_ID and not RAZORPAY_KEY_SECRET:

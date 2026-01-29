@@ -64,6 +64,17 @@ export function OrderCard({ order, onComplete, canCollectCash }: OrderCardProps)
     setError(null);
     setIsCompleting(true);
 
+    // For cash orders with pending payment, collect cash first
+    const needsCash = order.payment_method === 'cash' && order.payment_status === 'pending';
+    if (needsCash) {
+      const cashResponse = await orderApi.collectCash(order.id);
+      if (!cashResponse.success) {
+        setError(cashResponse.error || 'Failed to collect cash');
+        setIsCompleting(false);
+        return;
+      }
+    }
+
     const response = await orderApi.markCompleted(order.id);
 
     if (!response.success) {
@@ -80,12 +91,12 @@ export function OrderCard({ order, onComplete, canCollectCash }: OrderCardProps)
   const needsCashCollection = order.payment_method === 'cash' && order.payment_status === 'pending';
   const canComplete = !needsCashCollection || canCollectCash;
 
-  // Card urgency styling based on status
+  // Card urgency styling based on status (only pending/preparing/completed exist)
   const cardClassName = cn(
     'border-l-4 transition-all',
-    order.status === 'ready' && 'border-l-success bg-success/5',
     order.status === 'preparing' && 'border-l-info',
-    order.status === 'pending' && 'border-l-warning'
+    order.status === 'pending' && 'border-l-warning',
+    order.status === 'completed' && 'border-l-success bg-success/5'
   );
 
   return (

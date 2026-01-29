@@ -170,7 +170,8 @@ export default function StaffOrdersPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
+                {/* Backend exposes payment_status='success' for paid orders */}
+                <SelectItem value="success">Paid</SelectItem>
                 <SelectItem value="pending">Unpaid</SelectItem>
               </SelectContent>
             </Select>

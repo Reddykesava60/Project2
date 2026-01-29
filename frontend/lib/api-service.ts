@@ -166,9 +166,9 @@ export interface Order {
     daily_sequence: number
     restaurant: string
     customer_name?: string
-    payment_method: 'CASH' | 'ONLINE'
-    payment_status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'REFUNDED'
-    status: 'PENDING' | 'AWAITING_PAYMENT' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED'
+    payment_method: 'cash' | 'upi'  // Backend uses lowercase
+    payment_status: 'pending' | 'success'  // Backend ONLY has pending/success
+    status: 'pending' | 'preparing' | 'completed'  // Backend ONLY has these 3
     subtotal: number
     tax: number
     total_amount: number
@@ -269,7 +269,7 @@ export const publicService = {
     async createOrder(slug: string, data: {
         items: { menu_item_id: string; quantity: number }[]
         customer_name?: string
-        payment_method: 'CASH' | 'ONLINE'
+        payment_method: 'cash' | 'upi'  // Backend uses lowercase: cash or upi
         privacy_accepted?: boolean
     }): Promise<Order> {
         const response = await fetch(`${BACKEND_URL}/api/public/r/${slug}/order/`, {

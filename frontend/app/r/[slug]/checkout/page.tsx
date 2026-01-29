@@ -87,7 +87,7 @@ export default function CheckoutPage() {
       const order = await publicService.createOrder(slug, {
         items: orderItems,
         customer_name: customerName.trim(),
-        payment_method: paymentMethod.toUpperCase() as 'CASH' | 'ONLINE',
+        payment_method: paymentMethod,  // Already lowercase ('cash' or 'upi')
         privacy_accepted: true,
       });
 
@@ -312,15 +312,15 @@ export default function CheckoutPage() {
               className="space-y-3"
             >
               <label
-                htmlFor="online"
+                htmlFor="upi"
                 className="flex cursor-pointer items-center gap-4 rounded-lg border border-border p-4 transition-colors hover:bg-muted/50 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
               >
-                <RadioGroupItem value="online" id="online" />
+                <RadioGroupItem value="upi" id="upi" />
                 <CreditCard className="h-5 w-5 text-muted-foreground" />
                 <div className="flex-1">
-                  <p className="font-medium text-foreground">Pay Online</p>
+                  <p className="font-medium text-foreground">Pay Online (UPI)</p>
                   <p className="text-sm text-muted-foreground">
-                    Pay now with card or digital wallet
+                    Pay now with UPI or digital wallet
                   </p>
                 </div>
               </label>

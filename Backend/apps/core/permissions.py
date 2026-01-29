@@ -8,11 +8,17 @@ from rest_framework import permissions
 class IsOwner(permissions.BasePermission):
     """
     Permission to only allow owners of a restaurant to access it.
+    Platform admins also have access for oversight.
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == 'restaurant_owner'
+        # Backwards compatible role values: some older data/tests use 'OWNER'
+        # Platform admins have oversight access
+        return request.user.is_authenticated and request.user.role in ['restaurant_owner', 'OWNER', 'platform_admin', 'ADMIN']
 
     def has_object_permission(self, request, view, obj):
+        # Platform admins can access any object
+        if request.user.role in ['platform_admin', 'ADMIN']:
+            return True
         # Check if the object has a restaurant attribute
         if hasattr(obj, 'restaurant'):
             return obj.restaurant.owner == request.user
@@ -27,20 +33,21 @@ class IsStaff(permissions.BasePermission):
     Permission for staff members of a restaurant.
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ['restaurant_owner', 'staff']
+        # Backwards compatible role values: some older data/tests use 'OWNER'/'STAFF'
+        return request.user.is_authenticated and request.user.role in ['restaurant_owner', 'staff', 'OWNER', 'STAFF']
 
     def has_object_permission(self, request, view, obj):
         user = request.user
         
         # Owners have full access to their restaurants
-        if user.role == 'restaurant_owner':
+        if user.role in ['restaurant_owner', 'OWNER']:
             if hasattr(obj, 'restaurant'):
                 return obj.restaurant.owner == user
             if hasattr(obj, 'owner'):
                 return obj.owner == user
         
         # Staff have access to their assigned restaurant
-        if user.role == 'staff':
+        if user.role in ['staff', 'STAFF']:
             staff_profile = getattr(user, 'staff_profile', None)
             if staff_profile and staff_profile.restaurant:
                 if hasattr(obj, 'restaurant'):
@@ -56,7 +63,8 @@ class IsPlatformAdmin(permissions.BasePermission):
     Permission for platform administrators.
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == 'platform_admin'
+        # Backwards compatible role values: some older data/tests use 'ADMIN'
+        return request.user.is_authenticated and request.user.role in ['platform_admin', 'ADMIN']
 
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
@@ -87,10 +95,10 @@ class CanCollectCash(permissions.BasePermission):
         if not user.is_authenticated:
             return False
         
-        if user.role == 'restaurant_owner':
+        if user.role in ['restaurant_owner', 'OWNER']:
             return True
         
-        if user.role == 'staff':
+        if user.role in ['staff', 'STAFF']:
             staff_profile = getattr(user, 'staff_profile', None)
             if staff_profile:
                 return staff_profile.can_collect_cash
@@ -107,10 +115,10 @@ class CanOverrideOrders(permissions.BasePermission):
         if not user.is_authenticated:
             return False
         
-        if user.role == 'restaurant_owner':
+        if user.role in ['restaurant_owner', 'OWNER']:
             return True
         
-        if user.role == 'staff':
+        if user.role in ['staff', 'STAFF']:
             staff_profile = getattr(user, 'staff_profile', None)
             if staff_profile:
                 return staff_profile.can_override_orders
