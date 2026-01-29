@@ -124,3 +124,47 @@ class CanOverrideOrders(permissions.BasePermission):
                 return staff_profile.can_override_orders
         
         return False
+
+
+class CanManageStock(permissions.BasePermission):
+    """
+    Permission for staff who can manage stock/menu items.
+    """
+    def has_permission(self, request, view):
+        user = request.user
+        if not user.is_authenticated:
+            return False
+        
+        if user.role in ['restaurant_owner', 'OWNER', 'platform_admin', 'ADMIN']:
+            return True
+        
+        if user.role in ['staff', 'STAFF']:
+            staff_profile = getattr(user, 'staff_profile', None)
+            if staff_profile and staff_profile.is_active:
+                return staff_profile.can_manage_stock
+        
+        return False
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        
+        if user.role in ['platform_admin', 'ADMIN']:
+            return True
+
+        # Owners
+        if user.role in ['restaurant_owner', 'OWNER']:
+            if hasattr(obj, 'restaurant'):
+                return obj.restaurant.owner == user
+            if hasattr(obj, 'owner'):
+                return obj.owner == user
+
+        # Staff
+        if user.role in ['staff', 'STAFF']:
+            staff_profile = getattr(user, 'staff_profile', None)
+            if staff_profile and staff_profile.is_active and staff_profile.can_manage_stock:
+                if hasattr(obj, 'restaurant'):
+                    return obj.restaurant == staff_profile.restaurant
+                if hasattr(obj, 'id'):
+                    return obj.id == staff_profile.restaurant_id
+        
+        return False

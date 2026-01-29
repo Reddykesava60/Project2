@@ -88,6 +88,7 @@ export function OwnerSidebar({ onLogout }: { onLogout?: () => void }) {
     { href: '/owner/dashboard', label: 'Dashboard', icon: <Home className="h-5 w-5" /> },
     { href: '/owner/orders', label: 'Orders', icon: <ClipboardList className="h-5 w-5" /> },
     { href: '/owner/menu', label: 'Menu', icon: <UtensilsCrossed className="h-5 w-5" /> },
+    { href: '/staff/stock', label: 'Stock Control', icon: <UtensilsCrossed className="h-5 w-5" /> }, // Owner accesses Staff Stock Page
     { href: '/owner/staff', label: 'Staff', icon: <Users className="h-5 w-5" /> },
     { href: '/owner/qr', label: 'QR Code', icon: <QrCode className="h-5 w-5" /> },
     { href: '/owner/analytics', label: 'Analytics', icon: <BarChart3 className="h-5 w-5" /> },

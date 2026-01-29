@@ -11,15 +11,16 @@ from .models import User, LoginHistory
 class UserAdmin(BaseUserAdmin):
     """Custom admin for User model."""
     
-    list_display = ['email', 'first_name', 'last_name', 'role', 'is_verified', 'date_joined']
-    list_filter = ['role', 'is_verified', 'is_active', 'date_joined']
+    list_display = ['email', 'first_name', 'last_name', 'role', 'restaurant', 'is_verified', 'is_active', 'date_joined']
+    list_filter = ['role', 'is_verified', 'is_active', 'restaurant', 'date_joined']
     search_fields = ['email', 'first_name', 'last_name', 'phone']
     ordering = ['-date_joined']
+    list_editable = ['role', 'is_verified', 'is_active']
     
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
         ('Personal Info', {'fields': ('first_name', 'last_name', 'phone')}),
-        ('Role & Status', {'fields': ('role', 'is_verified', 'two_factor_enabled')}),
+        ('Role & Restaurant', {'fields': ('role', 'restaurant', 'is_verified', 'two_factor_enabled')}),
         ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         ('Important Dates', {'fields': ('last_login', 'date_joined')}),
     )
@@ -27,7 +28,7 @@ class UserAdmin(BaseUserAdmin):
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('email', 'password1', 'password2', 'first_name', 'last_name', 'role'),
+            'fields': ('email', 'password1', 'password2', 'first_name', 'last_name', 'role', 'restaurant'),
         }),
     )
 

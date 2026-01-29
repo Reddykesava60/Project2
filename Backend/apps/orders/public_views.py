@@ -7,6 +7,7 @@ import logging
 import hashlib
 import secrets
 from decimal import Decimal
+from django.conf import settings
 from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -132,7 +133,9 @@ class PublicOrderCreateView(generics.CreateAPIView):
         payment_method = request.data.get('payment_method', '').lower()
         
         # For UPI orders, do NOT create order. Return error directing to payment flow.
-        if payment_method == 'upi':
+        # UNLESS SKIP_UPI_PAYMENT_FLOW is enabled for local testing
+        skip_upi_flow = getattr(settings, 'SKIP_UPI_PAYMENT_FLOW', False)
+        if payment_method == 'upi' and not skip_upi_flow:
             return Response(
                 {
                     'error': 'UPI_REQUIRES_PAYMENT_FLOW',
@@ -142,7 +145,7 @@ class PublicOrderCreateView(generics.CreateAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # CASH orders: Create immediately (staff will collect payment)
+        # CASH orders (or UPI with skip flow): Create immediately
         serializer = self.get_serializer(
             data=request.data,
             context={'restaurant': restaurant, 'request': request}
@@ -150,14 +153,21 @@ class PublicOrderCreateView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         order = serializer.save()
         
+        # If UPI with skip flow enabled, auto-approve the payment
+        if payment_method == 'upi' and skip_upi_flow:
+            order.status = 'preparing'
+            order.payment_status = 'success'
+            order.save(update_fields=['status', 'payment_status'])
+        
         # Audit log for order creation
+        order_type_desc = 'UPI (auto-approved)' if (payment_method == 'upi' and skip_upi_flow) else 'CASH'
         create_audit_log(
             action=AuditLog.Action.ORDER_CREATED,
             restaurant=restaurant,
             entity=order,
             entity_type='Order',
             entity_repr=f'Order {order.order_number}',
-            description=f'Customer created CASH order via QR: {order.total_amount}',
+            description=f'Customer created {order_type_desc} order via QR: {order.total_amount}',
             metadata={
                 'order_type': order.order_type,
                 'payment_method': order.payment_method,
@@ -350,9 +360,31 @@ class InitiateUPIPaymentView(APIView):
                     is_active=True,
                     is_available=True
                 )
+                
+                # Manual stock check for initiation
+                quantity = int(item_data.get('quantity', 1))
+                if menu_item.stock_quantity is not None and menu_item.stock_quantity < quantity:
+                     return Response(
+                        {
+                            'error': 'INSUFFICIENT_STOCK',
+                            'code': 'INSUFFICIENT_STOCK',
+                            'item_id': str(menu_item.id),
+                            'item_name': menu_item.name,
+                            'available_quantity': menu_item.stock_quantity,
+                            'requested_quantity': quantity,
+                            'message': f"Only {menu_item.stock_quantity} units of {menu_item.name} are available."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
             except MenuItem.DoesNotExist:
                 return Response(
-                    {'error': f"Menu item {item_data.get('menu_item_id')} not found or unavailable."},
+                    {
+                        'error': 'ITEM_UNAVAILABLE',
+                        'code': 'ITEM_UNAVAILABLE',
+                        'item_id': item_data.get('menu_item_id'),
+                        'message': 'One or more items in your cart are unavailable.'
+                    },
                     status=status.HTTP_400_BAD_REQUEST
                 )
             

@@ -57,12 +57,24 @@ export function BottomNav({ items }: BottomNavProps) {
 }
 
 // Pre-configured navigation for each role
+import { useAuth } from '@/contexts/auth-context';
+
 export function StaffBottomNav() {
+  const { user } = useAuth();
+
   const items: NavItem[] = [
     { href: '/staff/orders', label: 'Orders', icon: <ClipboardList className="h-6 w-6" /> },
     { href: '/staff/scan', label: 'Scan', icon: <QrCode className="h-6 w-6" /> },
-    { href: '/staff/new-order', label: 'New Order', icon: <UtensilsCrossed className="h-6 w-6" /> },
   ];
+
+  if (user && user.can_manage_stock) {
+    items.push({
+      href: '/staff/stock',
+      label: 'Stock',
+      icon: <UtensilsCrossed className="h-6 w-6" />
+    });
+  }
+
   return <BottomNav items={items} />;
 }
 
@@ -71,6 +83,7 @@ export function OwnerMobileNav() {
     { href: '/owner/dashboard', label: 'Dashboard', icon: <Home className="h-6 w-6" /> },
     { href: '/owner/orders', label: 'Orders', icon: <ClipboardList className="h-6 w-6" /> },
     { href: '/owner/menu', label: 'Menu', icon: <UtensilsCrossed className="h-6 w-6" /> },
+    { href: '/staff/stock', label: 'Stock', icon: <UtensilsCrossed className="h-6 w-6" /> },
     { href: '/owner/staff', label: 'Staff', icon: <Users className="h-6 w-6" /> },
     { href: '/owner/settings', label: 'Settings', icon: <Settings className="h-6 w-6" /> },
   ];

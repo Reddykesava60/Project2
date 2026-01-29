@@ -118,6 +118,10 @@ class Staff(BaseModel):
     # Permissions
     can_collect_cash = models.BooleanField(default=False)
     can_override_orders = models.BooleanField(default=False)
+    can_manage_stock = models.BooleanField(
+        default=False,
+        help_text='Allow staff to update item availability and stock quantities'
+    )
     is_active = models.BooleanField(default=True)
     
     # Work info

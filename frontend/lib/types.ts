@@ -24,6 +24,7 @@ export interface User {
   role: UserRole;
   restaurant_id?: string;
   can_collect_cash: boolean;
+  can_manage_stock: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -76,8 +77,11 @@ export interface MenuItem {
   description?: string;
   price: number;
   image_url?: string;
+  stock_quantity: number | null; // null = unlimited
   is_available: boolean;
-  is_veg: boolean;
+  is_active: boolean;
+  is_vegetarian: boolean;
+  is_vegan: boolean;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -153,6 +157,7 @@ export interface StaffMember {
   name: string;
   email: string;
   can_collect_cash: boolean;
+  can_manage_stock: boolean;
   is_active: boolean;
   created_at: string;
 }

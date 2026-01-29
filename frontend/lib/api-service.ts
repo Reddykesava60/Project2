@@ -31,6 +31,68 @@ async function fetchWithAuth<T>(
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: 'An error occurred' }))
+
+        // Helper to extract structured error
+        const getStructuredError = (e: any) => {
+            if (e && (e.code === 'ITEM_UNAVAILABLE' || e.code === 'INSUFFICIENT_STOCK')) return e;
+            return null;
+        }
+
+        // 1. Root object
+        const rootErr = getStructuredError(error);
+        if (rootErr) {
+            const err = new Error(rootErr.message || 'Item unavailable')
+            Object.assign(err, rootErr)
+            throw err
+        }
+
+        // 2. Wrapped in array [{ code: 'ITEM_UNAVAILABLE' }]
+        if (Array.isArray(error)) {
+            if (error.length > 0) {
+                const arrErr = getStructuredError(error[0]);
+                if (arrErr) {
+                    const err = new Error(arrErr.message || 'Item unavailable')
+                    Object.assign(err, arrErr)
+                    throw err
+                }
+                // Fallback for normal string array
+                if (typeof error[0] === 'string') {
+                    throw new Error(error[0])
+                }
+            }
+        }
+
+        // Handle DRF object errors (e.g. { "non_field_errors": ["Error..."] } or { "field": ["Error..."] })
+        if (typeof error === 'object' && error !== null) {
+            if (error.non_field_errors && Array.isArray(error.non_field_errors)) {
+                throw new Error(error.non_field_errors[0])
+            }
+            if (error.detail) {
+                throw new Error(error.detail)
+            }
+            if (error.error) {
+                throw new Error(error.error)
+            }
+            if (error.message) {
+                throw new Error(error.message)
+            }
+
+            // If it's a field validation error like { "items": ["Reason"] }
+            // Try to find the first array value
+            const values = Object.values(error)
+            if (values.length > 0 && Array.isArray(values[0]) && values[0].length > 0) {
+                const firstVal = values[0][0]
+                // Check inside that array for our structured error
+                const nestedErr = getStructuredError(firstVal);
+                if (nestedErr) {
+                    const err = new Error(nestedErr.message || 'Item unavailable')
+                    Object.assign(err, nestedErr)
+                    throw err
+                }
+                throw new Error(String(firstVal))
+            }
+        }
+
         throw new Error(error.detail || error.error || `API Error: ${response.status}`)
     }
 
@@ -271,6 +333,9 @@ export const publicService = {
         customer_name?: string
         payment_method: 'cash' | 'upi'  // Backend uses lowercase: cash or upi
         privacy_accepted?: boolean
+        table_number?: string
+        is_parcel?: boolean
+        spicy_level?: string
     }): Promise<Order> {
         const response = await fetch(`${BACKEND_URL}/api/public/r/${slug}/order/`, {
             method: 'POST',
@@ -327,6 +392,60 @@ export const publicService = {
         if (!response.ok) {
             const error = await response.json().catch(() => ({}))
             throw new Error(error.detail || error.error || 'Payment verification failed')
+        }
+        return response.json()
+    },
+
+    // NEW UPI FLOW
+    async initiateUPIPayment(slug: string, data: {
+        items: { menu_item_id: string; quantity: number }[]
+        customer_name?: string
+        table_number?: string
+        is_parcel?: boolean
+        spicy_level?: string
+        privacy_accepted?: boolean
+    }): Promise<{
+        success: boolean
+        payment_token: string
+        razorpay_order_id: string
+        razorpay_key_id: string
+        amount: number
+        currency: string
+        total_amount: number
+    }> {
+        const response = await fetch(`${BACKEND_URL}/api/public/r/${slug}/payment/initiate/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ...data,
+                privacy_accepted: data.privacy_accepted ?? true,
+            }),
+        })
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}))
+            throw new Error(error.error || error.detail || error.message || 'Failed to initiate payment')
+        }
+        return response.json()
+    },
+
+    async verifyUPIPayment(slug: string, data: {
+        payment_token: string
+        razorpay_payment_id: string
+        razorpay_order_id: string
+        razorpay_signature: string
+    }): Promise<{
+        success: boolean
+        order: Order
+        message: string
+    }> {
+        const response = await fetch(`${BACKEND_URL}/api/public/r/${slug}/payment/verify/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        })
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}))
+            throw new Error(error.error || error.detail || error.message || 'Payment verification failed')
         }
         return response.json()
     },

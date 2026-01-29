@@ -194,6 +194,9 @@ export const staffApi = {
     // Standard update since there's no specific action for this in Audit logs we saw separate but perform_update handles it
     handleResponse<StaffMember>(http.patch(`/restaurants/staff/${id}/`, { can_collect_cash })),
 
+  toggleStockPermission: (id: string, can_manage_stock: boolean) =>
+    handleResponse<StaffMember>(http.patch(`/restaurants/staff/${id}/`, { can_manage_stock })),
+
   resetPassword: (id: string) =>
     handleResponse<{ message: string }>(http.post(`/restaurants/staff/${id}/reset_password/`)), // Verify existence if needed, assuming standard logic
 };

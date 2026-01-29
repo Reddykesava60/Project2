@@ -18,12 +18,13 @@ class OrderAdmin(admin.ModelAdmin):
     """Admin for Order model."""
     
     list_display = [
-        'order_number', 'restaurant', 'status', 'payment_method',
+        'order_number', 'restaurant', 'customer_name', 'status', 'payment_method',
         'payment_status', 'total_amount', 'created_at'
     ]
     list_filter = ['status', 'payment_method', 'payment_status', 'order_type', 'restaurant', 'created_at']
     search_fields = ['order_number', 'customer_name', 'restaurant__name']
     ordering = ['-created_at']
+    list_editable = ['status', 'payment_status']
     inlines = [OrderItemInline]
     
     fieldsets = (

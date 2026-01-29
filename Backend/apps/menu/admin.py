@@ -20,10 +20,11 @@ class MenuCategoryAdmin(admin.ModelAdmin):
 class MenuItemAdmin(admin.ModelAdmin):
     """Admin for MenuItem model."""
     
-    list_display = ['name', 'category', 'restaurant', 'price', 'is_available', 'is_active', 'times_ordered']
+    list_display = ['name', 'category', 'restaurant', 'price', 'is_vegetarian', 'is_vegan', 'is_available', 'is_active', 'times_ordered']
     list_filter = ['is_available', 'is_active', 'is_vegetarian', 'is_vegan', 'restaurant', 'category']
     search_fields = ['name', 'description', 'restaurant__name']
     ordering = ['restaurant', 'category', 'display_order', 'name']
+    list_editable = ['is_vegetarian', 'is_vegan', 'is_available', 'is_active']
     
     fieldsets = (
         (None, {'fields': ('name', 'description', 'category', 'restaurant')}),

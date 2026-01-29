@@ -16,6 +16,7 @@ interface CartStore {
   paymentMethod: PaymentMethod;
   isParcel: boolean;
   spicyLevel: 'normal' | 'medium' | 'high';
+  tableNumber: string;
 
   // Actions
   setRestaurant: (id: string, slug: string) => void;
@@ -26,6 +27,7 @@ interface CartStore {
   setPaymentMethod: (method: PaymentMethod) => void;
   setParcel: (isParcel: boolean) => void;
   setSpicyLevel: (level: 'normal' | 'medium' | 'high') => void;
+  setTableNumber: (number: string) => void;
   clearCart: () => void;
 
   // Computed
@@ -44,6 +46,8 @@ export const useCartStore = create<CartStore>()(
       isParcel: false,
       spicyLevel: 'normal',
 
+      tableNumber: '',
+
       setRestaurant: (id, slug) => {
         const state = get();
         // Clear cart if switching restaurants
@@ -56,6 +60,7 @@ export const useCartStore = create<CartStore>()(
             paymentMethod: 'upi',  // Backend uses 'upi' for online payments
             isParcel: false,
             spicyLevel: 'normal',
+            tableNumber: '',
           });
         } else {
           set({ restaurantId: id, restaurantSlug: slug });
@@ -107,6 +112,8 @@ export const useCartStore = create<CartStore>()(
 
       setSpicyLevel: (level) => set({ spicyLevel: level }),
 
+      setTableNumber: (number) => set({ tableNumber: number }),
+
       clearCart: () =>
         set({
           items: [],
@@ -114,6 +121,7 @@ export const useCartStore = create<CartStore>()(
           paymentMethod: 'upi',  // Backend uses 'upi' for online payments
           isParcel: false,
           spicyLevel: 'normal',
+          tableNumber: '',
         }),
 
       getTotal: () => {

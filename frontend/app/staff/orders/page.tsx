@@ -10,18 +10,19 @@ import { SkeletonOrderCard } from '@/components/ui/loading-states';
 import { ErrorState, EmptyState } from '@/components/ui/error-states';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { RefreshCw, Search, ClipboardList, Bell } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { RefreshCw, Search, ClipboardList, Bell, Banknote, ChefHat } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function StaffOrdersPage() {
   const { user } = useAuth();
   const restaurantId = (user as any)?.restaurant_id;
+  const canCollectCash = (user as any)?.can_collect_cash || false;
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [paymentFilter, setPaymentFilter] = useState<string>('all');
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [timeSort, setTimeSort] = useState<'newest' | 'oldest'>('oldest');
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<'collect-cash' | 'active'>('collect-cash');
   const [newOrderAlert, setNewOrderAlert] = useState(false);
   const [previousOrderCount, setPreviousOrderCount] = useState<number | null>(null);
 
@@ -38,21 +39,36 @@ export default function StaffOrdersPage() {
 
   const orders = ordersData?.data || [];
 
-  // Extract unique items from active orders for filtering
-  const allAvailableItems = Array.from(
-    new Set(orders.flatMap((o) => o.items.map((i) => i.menu_item_name)))
-  ).sort();
-
   // New order detection
   useEffect(() => {
     if (previousOrderCount !== null && orders.length > previousOrderCount) {
       setNewOrderAlert(true);
-      // Auto-dismiss after 5 seconds
       const timer = setTimeout(() => setNewOrderAlert(false), 5000);
       return () => clearTimeout(timer);
     }
     setPreviousOrderCount(orders.length);
   }, [orders.length, previousOrderCount]);
+
+  // SEGMENTED LISTS for Super Staff (can_collect_cash=true)
+  // 1. Collect Cash: pending + cash payment
+  const collectCashOrders = orders.filter(
+    (o) => o.status === 'pending' && o.payment_method === 'cash'
+  );
+  
+  // 2. Active Orders: preparing status
+  const activeOrders = orders.filter(
+    (o) => o.status === 'preparing'
+  );
+
+  // For Normal Staff: only preparing orders
+  const normalStaffOrders = orders.filter(
+    (o) => o.status === 'preparing'
+  );
+
+  // Extract unique items from normal staff orders for item filtering
+  const allAvailableItems = Array.from(
+    new Set(normalStaffOrders.flatMap((o) => o.items.map((i) => i.menu_item_name)))
+  ).sort();
 
   const toggleItemFilter = (itemName: string) => {
     setSelectedItems((prev) =>
@@ -62,43 +78,40 @@ export default function StaffOrdersPage() {
     );
   };
 
-  // Filter orders based on search, payment status, and selected items
-  const filteredOrders = orders.filter((order) => {
-    const matchesSearch =
-      searchQuery === '' ||
+  // Search filter function
+  const filterBySearch = (orderList: Order[]) => {
+    if (!searchQuery) return orderList;
+    return orderList.filter((order) =>
       (order.daily_order_number || order.order_number || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       order.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       order.items.some((item) =>
         item.menu_item_name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      )
+    );
+  };
 
-    const matchesPayment =
-      paymentFilter === 'all' || order.payment_status === paymentFilter;
+  // Sort orders by time
+  const sortOrders = (orderList: Order[]) => {
+    return [...orderList].sort((a, b) => {
+      const timeA = new Date(a.created_at).getTime();
+      const timeB = new Date(b.created_at).getTime();
+      return timeSort === 'newest' ? timeB - timeA : timeA - timeB;
+    });
+  };
 
-    const matchesItems =
+  // Apply filters and sorting
+  const filteredCollectCash = sortOrders(filterBySearch(collectCashOrders));
+  const filteredActiveOrders = sortOrders(filterBySearch(activeOrders));
+  
+  // Normal staff: apply item filter + search
+  const filteredNormalStaff = sortOrders(
+    filterBySearch(normalStaffOrders).filter((order) =>
       selectedItems.length === 0 ||
-      selectedItems.every((selectedItem) =>
+      selectedItems.some((selectedItem) =>
         order.items.some((item) => item.menu_item_name === selectedItem)
-      );
-
-    return matchesSearch && matchesPayment && matchesItems;
-  });
-
-  // Sort by creation time (respecting timeSort) and status priority
-  const sortedOrders = [...filteredOrders].sort((a, b) => {
-    // 1. Status Priority: Ready orders first, then Preparing, then Pending
-    const statusOrder = { ready: 0, preparing: 1, pending: 2 };
-    const statusDiff = (statusOrder[a.status as keyof typeof statusOrder] || 3) -
-      (statusOrder[b.status as keyof typeof statusOrder] || 3);
-
-    if (statusDiff !== 0) return statusDiff;
-
-    // 2. Time Sorting: Within same status, sort by creation time
-    const timeA = new Date(a.created_at).getTime();
-    const timeB = new Date(b.created_at).getTime();
-
-    return timeSort === 'newest' ? timeB - timeA : timeA - timeB;
-  });
+      )
+    )
+  );
 
   if (!restaurantId) {
     return (
@@ -111,13 +124,59 @@ export default function StaffOrdersPage() {
     );
   }
 
+  // Section component for order lists
+  const OrderSection = ({ 
+    title, 
+    icon: Icon, 
+    orders: sectionOrders, 
+    emptyMessage,
+    badgeColor = 'bg-primary'
+  }: { 
+    title: string; 
+    icon: React.ElementType; 
+    orders: Order[]; 
+    emptyMessage: string;
+    badgeColor?: string;
+  }) => (
+    <section className="mb-6">
+      <div className="flex items-center gap-2 mb-3 px-1">
+        <Icon className="h-5 w-5 text-muted-foreground" />
+        <h2 className="text-lg font-bold text-foreground">{title}</h2>
+        <span className={cn(
+          "px-2 py-0.5 rounded-full text-xs font-bold text-white",
+          badgeColor
+        )}>
+          {sectionOrders.length}
+        </span>
+      </div>
+      {sectionOrders.length === 0 ? (
+        <div className="bg-muted/30 rounded-lg p-6 text-center border border-dashed border-border">
+          <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {sectionOrders.map((order) => (
+            <OrderCard
+              key={order.id}
+              order={order}
+              onComplete={() => mutate()}
+              canCollectCash={canCollectCash}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+
   return (
     <main className="min-h-screen">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-border bg-background">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-black text-foreground tracking-tight">Active Orders</h1>
+            <h1 className="text-xl font-black text-foreground tracking-tight">
+              {canCollectCash ? 'Super Staff Orders' : 'Active Orders'}
+            </h1>
             <div className="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-full border border-border">
               <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap">Live</span>
@@ -152,35 +211,40 @@ export default function StaffOrdersPage() {
           </div>
         )}
 
-        {/* Filters */}
-        <div className="space-y-3 px-4 pb-3">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search orders..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-11 pl-9"
-              />
-            </div>
-            <Select value={paymentFilter} onValueChange={setPaymentFilter}>
-              <SelectTrigger className="h-11 w-[130px]">
-                <SelectValue placeholder="Payment" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                {/* Backend exposes payment_status='success' for paid orders */}
-                <SelectItem value="success">Paid</SelectItem>
-                <SelectItem value="pending">Unpaid</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        {/* Tabs for Super Staff */}
+        {canCollectCash && (
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'collect-cash' | 'active')}>
+            <TabsList className="mx-4 mb-3 grid w-auto grid-cols-2">
+              <TabsTrigger value="collect-cash" className="min-h-[44px] gap-2">
+                <Banknote className="h-4 w-4" />
+                Collect Cash ({collectCashOrders.length})
+              </TabsTrigger>
+              <TabsTrigger value="active" className="min-h-[44px] gap-2">
+                <ChefHat className="h-4 w-4" />
+                Active ({activeOrders.length})
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
 
-          {/* Item Quick Filters */}
-          {allAvailableItems.length > 0 && (
+        {/* Search */}
+        <div className="px-4 pb-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search orders..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-11 pl-9"
+            />
+          </div>
+        </div>
+
+        {/* Item Quick Filters - Only for Normal Staff */}
+        {!canCollectCash && allAvailableItems.length > 0 && (
+          <div className="px-4 pb-3">
             <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-              <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap uppercase tracking-wider">Filter Items:</span>
+              <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap uppercase tracking-wider">Filter:</span>
               {allAvailableItems.map((item) => (
                 <Button
                   key={item}
@@ -197,13 +261,23 @@ export default function StaffOrdersPage() {
                   {item}
                 </Button>
               ))}
+              {selectedItems.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedItems([])}
+                  className="flex-shrink-0 h-8 px-3 rounded-full text-xs font-medium text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </Button>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </header>
 
-      {/* Orders List */}
-      <div className="p-4 space-y-4">
+      {/* Orders Content */}
+      <div className="p-4">
         {isLoading ? (
           <>
             <SkeletonOrderCard />
@@ -216,25 +290,83 @@ export default function StaffOrdersPage() {
             message="Unable to fetch orders. Please try again."
             onRetry={() => mutate()}
           />
-        ) : sortedOrders.length === 0 ? (
-          <EmptyState
-            icon={<ClipboardList className="h-8 w-8 text-muted-foreground" />}
-            title="No Active Orders"
-            message={
-              searchQuery || paymentFilter !== 'all' || selectedItems.length > 0
-                ? 'No orders match your filters.'
-                : 'New orders will appear here automatically.'
-            }
-          />
+        ) : canCollectCash ? (
+          /* SUPER STAFF VIEW - Tabbed Navigation */
+          activeTab === 'collect-cash' ? (
+            /* Collect Cash Tab */
+            filteredCollectCash.length === 0 ? (
+              <EmptyState
+                icon={<Banknote className="h-8 w-8 text-muted-foreground" />}
+                title="No Pending Cash Orders"
+                message={
+                  searchQuery
+                    ? 'No orders match your search.'
+                    : 'Cash orders awaiting collection will appear here.'
+                }
+              />
+            ) : (
+              <div className="space-y-3">
+                {filteredCollectCash.map((order) => (
+                  <OrderCard
+                    key={order.id}
+                    order={order}
+                    onComplete={() => mutate()}
+                    canCollectCash={true}
+                  />
+                ))}
+              </div>
+            )
+          ) : (
+            /* Active Orders Tab */
+            filteredActiveOrders.length === 0 ? (
+              <EmptyState
+                icon={<ChefHat className="h-8 w-8 text-muted-foreground" />}
+                title="No Active Orders"
+                message={
+                  searchQuery
+                    ? 'No orders match your search.'
+                    : 'Orders being prepared will appear here.'
+                }
+              />
+            ) : (
+              <div className="space-y-3">
+                {filteredActiveOrders.map((order) => (
+                  <OrderCard
+                    key={order.id}
+                    order={order}
+                    onComplete={() => mutate()}
+                    canCollectCash={true}
+                  />
+                ))}
+              </div>
+            )
+          )
         ) : (
-          sortedOrders.map((order) => (
-            <OrderCard
-              key={order.id}
-              order={order}
-              onComplete={() => mutate()}
-              canCollectCash={user?.can_collect_cash || false}
-            />
-          ))
+          /* NORMAL STAFF VIEW - Only preparing orders */
+          <>
+            {filteredNormalStaff.length === 0 ? (
+              <EmptyState
+                icon={<ClipboardList className="h-8 w-8 text-muted-foreground" />}
+                title="No Active Orders"
+                message={
+                  searchQuery || selectedItems.length > 0
+                    ? 'No orders match your filters.'
+                    : 'Orders being prepared will appear here.'
+                }
+              />
+            ) : (
+              <div className="space-y-3">
+                {filteredNormalStaff.map((order) => (
+                  <OrderCard
+                    key={order.id}
+                    order={order}
+                    onComplete={() => mutate()}
+                    canCollectCash={false}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </main>

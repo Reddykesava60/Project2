@@ -67,7 +67,25 @@ export function MenuItemCard({ item }: MenuItemCardProps) {
         {/* Content */}
         <div className="flex flex-1 flex-col justify-between p-3">
           <div>
-            <h3 className="font-semibold text-foreground">{item.name}</h3>
+            <div className="flex items-center gap-2">
+              {/* Veg/Non-veg indicator */}
+              <span
+                className={cn(
+                  'inline-flex h-4 w-4 items-center justify-center rounded-sm border-2',
+                  item.is_vegetarian
+                    ? 'border-green-600'
+                    : 'border-red-600'
+                )}
+              >
+                <span
+                  className={cn(
+                    'h-2 w-2 rounded-full',
+                    item.is_vegetarian ? 'bg-green-600' : 'bg-red-600'
+                  )}
+                />
+              </span>
+              <h3 className="font-semibold text-foreground">{item.name}</h3>
+            </div>
             {item.description && (
               <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
                 {item.description}

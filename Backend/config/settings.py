@@ -219,6 +219,10 @@ RAZORPAY_LIVE_MODE = config('RAZORPAY_LIVE_MODE', default=True, cast=bool)
 # skips signature verification. NEVER enable in production!
 RAZORPAY_FORCE_SUCCESS = config('RAZORPAY_FORCE_SUCCESS', default=False, cast=bool)
 
+# SKIP_UPI_PAYMENT_FLOW: Testing only! When True, UPI orders are created directly
+# like cash orders (auto-approved). Skips the initiate/verify flow.
+SKIP_UPI_PAYMENT_FLOW = config('SKIP_UPI_PAYMENT_FLOW', default=False, cast=bool)
+
 # Safety check: Warn if simulation mode is enabled
 if RAZORPAY_FORCE_SUCCESS and not RAZORPAY_LIVE_MODE:
     import warnings

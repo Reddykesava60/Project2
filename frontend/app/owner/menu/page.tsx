@@ -57,6 +57,9 @@ export default function OwnerMenuPage() {
     price: '',
     image_url: '',
     is_available: true,
+    is_vegetarian: true,
+    is_vegan: false,
+    stock_quantity: '',
   });
 
   const {
@@ -65,14 +68,14 @@ export default function OwnerMenuPage() {
     isLoading,
     mutate,
   } = useSWR(
-    restaurantId ? `/menu/${restaurantId}` : null,
-    () => restaurantApi.getMenu(restaurantId!)
+    restaurantId ? ['menu', restaurantId] : null,
+    () => menuApi.getCategories(restaurantId!)
   );
 
-  const menuDataResponse = menuData?.data;
-  const categories = (Array.isArray(menuDataResponse)
-    ? menuDataResponse
-    : (menuDataResponse as any)?.results || []) as MenuCategory[];
+  // menuApi.getCategories returns MenuCategory[] directly in data
+  const categories = (Array.isArray(menuData?.data)
+    ? menuData?.data
+    : []) as MenuCategory[];
 
   // Category handlers
   const handleCreateCategory = async () => {
@@ -142,6 +145,9 @@ export default function OwnerMenuPage() {
       price: parseFloat(itemForm.price),
       image_url: itemForm.image_url.trim() || undefined,
       is_available: itemForm.is_available,
+      is_vegetarian: itemForm.is_vegetarian,
+      is_vegan: itemForm.is_vegan,
+      stock_quantity: itemForm.stock_quantity ? parseInt(itemForm.stock_quantity) : null,
     });
 
     if (!response.success) {
@@ -167,6 +173,9 @@ export default function OwnerMenuPage() {
       price: parseFloat(itemForm.price),
       image_url: itemForm.image_url.trim() || undefined,
       is_available: itemForm.is_available,
+      is_vegetarian: itemForm.is_vegetarian,
+      is_vegan: itemForm.is_vegan,
+      stock_quantity: itemForm.stock_quantity ? parseInt(itemForm.stock_quantity) : null,
     });
 
     if (!response.success) {
@@ -208,6 +217,9 @@ export default function OwnerMenuPage() {
       price: '',
       image_url: '',
       is_available: true,
+      is_vegetarian: true,
+      is_vegan: false,
+      stock_quantity: '',
     });
   };
 
@@ -224,6 +236,9 @@ export default function OwnerMenuPage() {
       price: item.price.toString(),
       image_url: item.image_url || '',
       is_available: item.is_available,
+      is_vegetarian: item.is_vegetarian || false,
+      is_vegan: item.is_vegan || false,
+      stock_quantity: item.stock_quantity !== null && item.stock_quantity !== undefined ? item.stock_quantity.toString() : '',
     });
   };
 
@@ -557,6 +572,18 @@ export default function OwnerMenuPage() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="item-stock">Stock Quantity</Label>
+              <Input
+                id="item-stock"
+                type="number"
+                min="0"
+                value={itemForm.stock_quantity}
+                onChange={(e) => setItemForm((f) => ({ ...f, stock_quantity: e.target.value }))}
+                placeholder="Unlimited"
+                className="h-12"
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="item-image">Image URL (optional)</Label>
               <Input
                 id="item-image"
@@ -574,6 +601,19 @@ export default function OwnerMenuPage() {
                 checked={itemForm.is_available}
                 onCheckedChange={(checked) =>
                   setItemForm((f) => ({ ...f, is_available: checked }))
+                }
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="item-nonveg">Non-Vegetarian</Label>
+                <p className="text-xs text-muted-foreground">Contains meat or fish</p>
+              </div>
+              <Switch
+                id="item-nonveg"
+                checked={!itemForm.is_vegetarian}
+                onCheckedChange={(checked) =>
+                  setItemForm((f) => ({ ...f, is_vegetarian: !checked, is_vegan: false }))
                 }
               />
             </div>
@@ -611,6 +651,6 @@ export default function OwnerMenuPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </main>
+    </main >
   );
 }

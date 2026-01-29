@@ -1,5 +1,15 @@
 # 🍽️ DineFlow2
 
+Email	Password	Role	Restaurant
+admin@dineflow.com	admin123	Platform Admin	—
+owner@restaurant.com	owner123	Restaurant Owner	The Italian Place
+staff@restaurant.com	staff123	Staff (can_collect_cash=True)	The Italian Place
+cook@restaurant.com	cook123	Staff (can_collect_cash=False)	The Italian Place
+http://localhost:3000/r/italian-place
+
+cd Backend;python manage.py runserver 8000
+cd frontend;npm run dev
+
 <div align="center">
 
 ![DineFlow2](https://img.shields.io/badge/DineFlow2-Restaurant%20SaaS-2563EB?style=for-the-badge)
@@ -200,6 +210,7 @@ python manage.py runserver 8000
 ```powershell
 # Navigate to frontend
 cd frontend
+
 
 # Install dependencies
 pnpm install  # or npm install

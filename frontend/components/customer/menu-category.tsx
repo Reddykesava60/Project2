@@ -11,8 +11,12 @@ interface MenuCategorySectionProps {
 export function MenuCategorySection({ category, vegFilter = 'all' }: MenuCategorySectionProps) {
   const filteredItems = category.items.filter((item) => {
     if (!item.is_available) return false;
-    if (vegFilter === 'veg') return item.is_veg;
-    if (vegFilter === 'non-veg') return !item.is_veg;
+    // Hide if out of stock (stock_quantity is 0)
+    // explicitly check for 0, as null/undefined means unlimited
+    if (item.stock_quantity === 0) return false;
+
+    if (vegFilter === 'veg') return item.is_vegetarian;
+    if (vegFilter === 'non-veg') return !item.is_vegetarian;
     return true;
   });
 

@@ -29,6 +29,7 @@ class UserSerializer(serializers.ModelSerializer):
     restaurant_slug = serializers.SerializerMethodField()
     can_collect_cash = serializers.SerializerMethodField()
     can_override_orders = serializers.SerializerMethodField()
+    can_manage_stock = serializers.SerializerMethodField()
     
     class Meta:
         model = User
@@ -38,7 +39,7 @@ class UserSerializer(serializers.ModelSerializer):
             'date_joined', 'last_login',
             # Restaurant & Staff fields
             'restaurant_id', 'restaurant_name', 'restaurant_slug',
-            'can_collect_cash', 'can_override_orders',
+            'can_collect_cash', 'can_override_orders', 'can_manage_stock',
         ]
         read_only_fields = ['id', 'email', 'role', 'date_joined', 'last_login', 'is_verified']
     
@@ -108,6 +109,17 @@ class UserSerializer(serializers.ModelSerializer):
             staff_profile = getattr(obj, 'staff_profile', None)
             if staff_profile:
                 return staff_profile.can_override_orders
+        elif obj.role == 'restaurant_owner':
+            # Owners always have all permissions
+            return True
+        return False
+
+    def get_can_manage_stock(self, obj):
+        """Get stock management permission (staff only)."""
+        if obj.role == 'staff':
+            staff_profile = getattr(obj, 'staff_profile', None)
+            if staff_profile:
+                return staff_profile.can_manage_stock
         elif obj.role == 'restaurant_owner':
             # Owners always have all permissions
             return True

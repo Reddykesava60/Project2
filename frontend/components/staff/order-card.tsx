@@ -34,7 +34,9 @@ interface OrderCardProps {
 
 export function OrderCard({ order, onComplete, canCollectCash }: OrderCardProps) {
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showCollectCashConfirm, setShowCollectCashConfirm] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [isCollectingCash, setIsCollectingCash] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -64,17 +66,6 @@ export function OrderCard({ order, onComplete, canCollectCash }: OrderCardProps)
     setError(null);
     setIsCompleting(true);
 
-    // For cash orders with pending payment, collect cash first
-    const needsCash = order.payment_method === 'cash' && order.payment_status === 'pending';
-    if (needsCash) {
-      const cashResponse = await orderApi.collectCash(order.id);
-      if (!cashResponse.success) {
-        setError(cashResponse.error || 'Failed to collect cash');
-        setIsCompleting(false);
-        return;
-      }
-    }
-
     const response = await orderApi.markCompleted(order.id);
 
     if (!response.success) {
@@ -88,8 +79,26 @@ export function OrderCard({ order, onComplete, canCollectCash }: OrderCardProps)
     onComplete();
   };
 
+  const handleCollectCash = async () => {
+    setError(null);
+    setIsCollectingCash(true);
+
+    const cashResponse = await orderApi.collectCash(order.id);
+    if (!cashResponse.success) {
+      setError(cashResponse.error || 'Failed to collect cash');
+      setIsCollectingCash(false);
+      return;
+    }
+
+    setIsCollectingCash(false);
+    setShowCollectCashConfirm(false);
+    onComplete();
+  };
+
   const needsCashCollection = order.payment_method === 'cash' && order.payment_status === 'pending';
-  const canComplete = !needsCashCollection || canCollectCash;
+  const isPending = order.status === 'pending';
+  const isPreparing = order.status === 'preparing';
+  const canComplete = order.payment_status === 'success' && isPreparing;
 
   // Card urgency styling based on status (only pending/preparing/completed exist)
   const cardClassName = cn(
@@ -185,7 +194,7 @@ export function OrderCard({ order, onComplete, canCollectCash }: OrderCardProps)
             <p className="font-black text-xl text-foreground">${Number(order.total).toFixed(2)}</p>
           </div>
 
-          {/* Cash Warning */}
+          {/* Cash Warning - for normal staff */}
           {needsCashCollection && !canCollectCash && (
             <div className="mt-3 flex items-center gap-2 rounded-lg bg-warning/10 p-3 text-sm text-warning-foreground font-medium">
               <Banknote className="h-5 w-5" />
@@ -201,8 +210,29 @@ export function OrderCard({ order, onComplete, canCollectCash }: OrderCardProps)
             </div>
           )}
 
-          {/* Complete Button */}
-          {order.status !== 'completed' && canComplete && (
+          {/* Collect Cash Button - For pending cash orders */}
+          {isPending && needsCashCollection && canCollectCash && (
+            <Button
+              onClick={() => setShowCollectCashConfirm(true)}
+              className="mt-6 h-14 w-full text-lg font-black bg-amber-500 hover:bg-amber-600 shadow-lg shadow-amber-500/20"
+              disabled={isCollectingCash}
+            >
+              {isCollectingCash ? (
+                <>
+                  <LoadingSpinner size="sm" className="mr-2" />
+                  Collecting...
+                </>
+              ) : (
+                <>
+                  <Banknote className="mr-2 h-6 w-6" />
+                  Collect Cash - ${Number(order.total).toFixed(2)}
+                </>
+              )}
+            </Button>
+          )}
+
+          {/* Complete Button - For preparing orders with successful payment */}
+          {canComplete && (
             <Button
               onClick={() => setShowConfirm(true)}
               className="mt-6 h-14 w-full text-lg font-black shadow-lg shadow-primary/20"
@@ -217,7 +247,6 @@ export function OrderCard({ order, onComplete, canCollectCash }: OrderCardProps)
                 <>
                   <CheckCircle className="mr-2 h-6 w-6" />
                   Complete Order
-                  {needsCashCollection && ` - Collect $${Number(order.total).toFixed(2)}`}
                 </>
               )}
             </Button>
@@ -255,14 +284,7 @@ export function OrderCard({ order, onComplete, canCollectCash }: OrderCardProps)
           <AlertDialogHeader>
             <AlertDialogTitle>Complete Order {order.daily_order_number}?</AlertDialogTitle>
             <AlertDialogDescription>
-              {needsCashCollection ? (
-                <>
-                  Confirm that you have collected <strong>${Number(order.total).toFixed(2)}</strong> in cash
-                  from the customer before completing this order.
-                </>
-              ) : (
-                'This will mark the order as completed and remove it from the active orders list.'
-              )}
+              This will mark the order as completed and remove it from the active orders list.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -281,6 +303,41 @@ export function OrderCard({ order, onComplete, canCollectCash }: OrderCardProps)
                 </>
               ) : (
                 'Complete Order'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Collect Cash Confirmation Dialog */}
+      <AlertDialog open={showCollectCashConfirm} onOpenChange={setShowCollectCashConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Collect Cash for Order {order.daily_order_number}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Confirm that you have collected <strong>${Number(order.total).toFixed(2)}</strong> in cash
+              from the customer. The order will move to &quot;Preparing&quot; status.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isCollectingCash} className="min-h-[44px]">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleCollectCash}
+              disabled={isCollectingCash}
+              className="min-h-[44px] bg-amber-500 hover:bg-amber-600"
+            >
+              {isCollectingCash ? (
+                <>
+                  <LoadingSpinner size="sm" className="mr-2" />
+                  Collecting...
+                </>
+              ) : (
+                <>
+                  <Banknote className="mr-2 h-4 w-4" />
+                  Confirm Cash Collected
+                </>
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

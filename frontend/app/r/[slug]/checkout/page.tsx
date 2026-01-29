@@ -50,6 +50,21 @@ export default function CheckoutPage() {
 
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
 
+  // Dynamic script loader
+  const loadRazorpay = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if ((window as any).Razorpay) {
+        resolve(true);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -77,25 +92,115 @@ export default function CheckoutPage() {
     setIsSubmitting(true);
 
     try {
-      // Format items for backend (menu_item_id instead of menu_item object)
+      // Format items
       const orderItems = items.map(item => ({
         menu_item_id: item.menu_item.id,
         quantity: item.quantity,
       }));
 
-      // Use public service for customer orders
-      const order = await publicService.createOrder(slug, {
-        items: orderItems,
-        customer_name: customerName.trim(),
-        payment_method: paymentMethod,  // Already lowercase ('cash' or 'upi')
-        privacy_accepted: true,
-      });
+      // ------------------------------------------------------------
+      // CASE 1: CASH ORDER
+      // ------------------------------------------------------------
+      if (paymentMethod === 'cash') {
+        const order = await publicService.createOrder(slug, {
+          items: orderItems,
+          customer_name: customerName.trim(),
+          payment_method: 'cash',
+          privacy_accepted: true,
+          table_number: useCartStore.getState().tableNumber,
+          is_parcel: useCartStore.getState().isParcel,
+          spicy_level: useCartStore.getState().spicyLevel,
+        });
 
-      // Store order info and navigate to success
-      clearCart();
-      router.push(`/r/${slug}/order-success?orderId=${order.id}&orderNumber=${order.order_number}`);
+        clearCart();
+        router.push(`/r/${slug}/order-success?orderId=${order.id}&orderNumber=${order.order_number}`);
+        return;
+      }
+
+      // ------------------------------------------------------------
+      // CASE 2: UPI / RAZORPAY ORDER
+      // ------------------------------------------------------------
+      if (paymentMethod === 'upi') {
+        // Step A: Load Razorpay SDK
+        const isLoaded = await loadRazorpay();
+        if (!isLoaded) {
+          throw new Error('Razorpay SDK failed to load. Please check your internet connection.');
+        }
+
+        // Step B: Initiate Payment (Server validation + Order Creation)
+        const initData = await publicService.initiateUPIPayment(slug, {
+          items: orderItems,
+          customer_name: customerName.trim(),
+          table_number: useCartStore.getState().tableNumber,
+          is_parcel: useCartStore.getState().isParcel,
+          spicy_level: useCartStore.getState().spicyLevel,
+          privacy_accepted: true,
+        });
+
+        // Step C: Open Razorpay Modal
+        const options = {
+          key: initData.razorpay_key_id,
+          amount: initData.amount,
+          currency: initData.currency,
+          name: "DineFlow Restaurant", // Ideally should be restaurant name
+          description: `Order Payment`,
+          order_id: initData.razorpay_order_id,
+          handler: async function (response: any) {
+            try {
+              // Step D: Verify Payment
+              const verifyData = await publicService.verifyUPIPayment(slug, {
+                payment_token: initData.payment_token,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+              });
+
+              if (verifyData.success) {
+                clearCart();
+                router.push(`/r/${slug}/order-success?orderId=${verifyData.order.id}&orderNumber=${verifyData.order.order_number}`);
+              } else {
+                setError(verifyData.message || 'Payment verification failed');
+                setIsSubmitting(false);
+              }
+            } catch (verErr: any) {
+              console.error("Verification Error:", verErr);
+              setError(verErr.message || 'Payment verification failed even though payment succeeded. Please contact staff.');
+              setIsSubmitting(false);
+            }
+          },
+          prefill: {
+            name: customerName.trim(),
+          },
+          theme: {
+            color: "#000000", // Customize based on theme if needed
+          },
+          modal: {
+            ondismiss: function () {
+              setIsSubmitting(false);
+            }
+          }
+        };
+
+        const rzp = new (window as any).Razorpay(options);
+        rzp.on('payment.failed', function (response: any) {
+          setError(response.error.description || 'Payment Failed');
+          setIsSubmitting(false);
+        });
+        rzp.open();
+      }
+
     } catch (err: any) {
-      setError(err.message || 'Failed to place order. Please try again.');
+      console.error("Order Creation Error:", err);
+
+
+      if ((err as any).code === 'ITEM_UNAVAILABLE' || (err as any).code === 'INSUFFICIENT_STOCK') {
+        setError(
+          err.message ||
+          `Some items in your cart are sold out using the requested quantity.`
+        );
+      } else {
+        setError(err.message || 'Failed to place order. Please try again.');
+      }
       setIsSubmitting(false);
     }
   };

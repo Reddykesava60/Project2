@@ -39,6 +39,7 @@ import {
   AlertCircle,
   UserCheck,
   UserX,
+  UtensilsCrossed,
 } from 'lucide-react';
 
 export default function OwnerStaffPage() {
@@ -105,6 +106,15 @@ export default function OwnerStaffPage() {
 
   const handleToggleCashPermission = async (staff: StaffMember) => {
     const response = await staffApi.toggleCashPermission(staff.id, !staff.can_collect_cash);
+    if (!response.success) {
+      alert(response.error || 'Failed to update permission');
+      return;
+    }
+    mutate();
+  };
+
+  const handleToggleStockPermission = async (staff: StaffMember) => {
+    const response = await staffApi.toggleStockPermission(staff.id, !staff.can_manage_stock);
     if (!response.success) {
       alert(response.error || 'Failed to update permission');
       return;
@@ -222,6 +232,22 @@ export default function OwnerStaffPage() {
                       {staff.can_collect_cash
                         ? 'Can collect cash and create cash orders'
                         : 'Cannot handle cash transactions'}
+                    </p>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                      <div className="flex items-center gap-2">
+                        <UtensilsCrossed className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">Stock Control</span>
+                      </div>
+                      <Switch
+                        checked={staff.can_manage_stock}
+                        onCheckedChange={() => handleToggleStockPermission(staff)}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {staff.can_manage_stock
+                        ? 'Can update menu stock & availability'
+                        : 'Cannot modify menu items'}
                     </p>
                   </div>
 

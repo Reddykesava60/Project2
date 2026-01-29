@@ -161,76 +161,99 @@ class OrderCreateSerializer(serializers.Serializer):
         return value
     
     def create(self, validated_data):
+        from django.db import transaction
+        
         restaurant = self.context['restaurant']
         items_data = validated_data.pop('items')
         validated_data.pop('privacy_accepted')
         
-        # Get next sequence number
-        daily_sequence = DailyOrderSequence.get_next_sequence(restaurant)
-        order_number = generate_order_number(daily_sequence)
-        
-        # Calculate totals
-        subtotal = Decimal('0.00')
-        order_items = []
-        
-        for item_data in items_data:
-            try:
-                menu_item = MenuItem.objects.get(
-                    id=item_data['menu_item_id'],
-                    restaurant=restaurant,
-                    is_active=True,
-                    is_available=True
-                )
-            except MenuItem.DoesNotExist:
-                raise serializers.ValidationError(
-                    f"Menu item {item_data['menu_item_id']} not found or unavailable."
-                )
+        with transaction.atomic():
+            # Get next sequence number
+            daily_sequence = DailyOrderSequence.get_next_sequence(restaurant)
+            order_number = generate_order_number(daily_sequence)
             
-            item_subtotal = menu_item.price * item_data['quantity']
-            subtotal += item_subtotal
+            # Calculate totals
+            subtotal = Decimal('0.00')
+            order_items = []
             
-            order_items.append({
-                'menu_item': menu_item,
-                'menu_item_name': menu_item.name,
-                'price_at_order': menu_item.price,
-                'quantity': item_data['quantity'],
-                'subtotal': item_subtotal,
-                'notes': item_data.get('notes', ''),
-            })
-        
-        # Calculate tax
-        tax = subtotal * restaurant.tax_rate
-        total_amount = subtotal + tax
- 
-        # PRD Rules:
-        # - All new orders start with status='pending' and payment_status='pending'
-        # - Status transitions: pending -> preparing -> completed
-        # - payment_status can only be set by backend (collect_payment or payment webhook)
-        
-        # Create order with lowercase status values
-        order = Order.objects.create(
-            restaurant=restaurant,
-            order_number=order_number,
-            daily_sequence=daily_sequence,
-            order_type=Order.OrderType.QR_CUSTOMER,
-            customer_name=validated_data['customer_name'],
-            table_number=validated_data.get('table_number', ''),
-            is_parcel=validated_data.get('is_parcel', False),
-            spicy_level=validated_data.get('spicy_level', 'normal'),
-            qr_signature=validated_data.get('qr_signature', ''),
-            status='pending',  # Always start pending
-            payment_method=validated_data['payment_method'],  # Already lowercase from choices
-            payment_status='pending',  # Always start pending - NEVER set by frontend
-            subtotal=subtotal,
-            tax=tax,
-            total_amount=total_amount,
-        )
-        
-        # Create order items
-        for item in order_items:
-            OrderItem.objects.create(order=order, **item)
-        
-        return order
+            for item_data in items_data:
+                try:
+                    # LOCK the menu item row to prevent race conditions
+                    menu_item = MenuItem.objects.select_for_update().get(
+                        id=item_data['menu_item_id'],
+                        restaurant=restaurant,
+                        is_active=True,
+                        is_available=True
+                    )
+                except MenuItem.DoesNotExist:
+                    raise serializers.ValidationError(
+                        f"Menu item {item_data['menu_item_id']} not found or unavailable."
+                    )
+                
+                # STOCK CHECK & DECREMENT
+                quantity = item_data['quantity']
+                if menu_item.stock_quantity is not None:
+                    if menu_item.stock_quantity < quantity:
+                        # Return structured data (DRF will wrap in list usually, but detailed structure helps)
+                        raise serializers.ValidationError(
+                            {
+                                'code': 'INSUFFICIENT_STOCK',
+                                'item_id': str(menu_item.id),
+                                'item_name': menu_item.name,
+                                'available_quantity': menu_item.stock_quantity,
+                                'message': f"Only {menu_item.stock_quantity} units of {menu_item.name} are available."
+                            }
+                        )
+                    menu_item.stock_quantity -= quantity
+                    # Optional: Auto-mark unavailable if 0, but backend logic should handle 0 stock visibility
+                    # keeping it strictly data-driven
+                    menu_item.save(update_fields=['stock_quantity', 'updated_at'])
+
+                item_subtotal = menu_item.price * quantity
+                subtotal += item_subtotal
+                
+                order_items.append({
+                    'menu_item': menu_item,
+                    'menu_item_name': menu_item.name,
+                    'price_at_order': menu_item.price,
+                    'quantity': quantity,
+                    'subtotal': item_subtotal,
+                    'notes': item_data.get('notes', ''),
+                })
+            
+            # Calculate tax
+            tax = subtotal * Decimal(str(restaurant.tax_rate))
+            total_amount = subtotal + tax
+    
+            # PRD Rules:
+            # - All new orders start with status='pending' and payment_status='pending'
+            # - Status transitions: pending -> preparing -> completed
+            # - payment_status can only be set by backend (collect_payment or payment webhook)
+            
+            # Create order with lowercase status values
+            order = Order.objects.create(
+                restaurant=restaurant,
+                order_number=order_number,
+                daily_sequence=daily_sequence,
+                order_type=Order.OrderType.QR_CUSTOMER,
+                customer_name=validated_data['customer_name'],
+                table_number=validated_data.get('table_number', ''),
+                is_parcel=validated_data.get('is_parcel', False),
+                spicy_level=validated_data.get('spicy_level', 'normal'),
+                qr_signature=validated_data.get('qr_signature', ''),
+                status='pending',  # Always start pending
+                payment_method=validated_data['payment_method'],  # Already lowercase from choices
+                payment_status='pending',  # Always start pending - NEVER set by frontend
+                subtotal=subtotal,
+                tax=tax,
+                total_amount=total_amount,
+            )
+            
+            # Create order items
+            for item in order_items:
+                OrderItem.objects.create(order=order, **item)
+            
+            return order
 
 
 class StaffOrderCreateSerializer(serializers.Serializer):
@@ -240,84 +263,98 @@ class StaffOrderCreateSerializer(serializers.Serializer):
     items = OrderItemCreateSerializer(many=True, min_length=1)
     
     def create(self, validated_data):
+        from django.db import transaction
+
         restaurant = self.context['restaurant']
         user = self.context['request'].user
         items_data = validated_data.pop('items')
         
-        # Get next sequence number
-        daily_sequence = DailyOrderSequence.get_next_sequence(restaurant)
-        order_number = generate_order_number(daily_sequence)
-        
-        # Calculate totals
-        subtotal = Decimal('0.00')
-        order_items = []
-        
-        for item_data in items_data:
-            try:
-                menu_item = MenuItem.objects.get(
-                    id=item_data['menu_item_id'],
-                    restaurant=restaurant,
-                    is_active=True,
-                    is_available=True
-                )
-            except MenuItem.DoesNotExist:
-                raise serializers.ValidationError(
-                    f"Menu item {item_data['menu_item_id']} not found or unavailable."
-                )
+        with transaction.atomic():
+            # Get next sequence number
+            daily_sequence = DailyOrderSequence.get_next_sequence(restaurant)
+            order_number = generate_order_number(daily_sequence)
             
-            item_subtotal = menu_item.price * item_data['quantity']
-            subtotal += item_subtotal
+            # Calculate totals
+            subtotal = Decimal('0.00')
+            order_items = []
             
-            order_items.append({
-                'menu_item': menu_item,
-                'menu_item_name': menu_item.name,
-                'price_at_order': menu_item.price,
-                'quantity': item_data['quantity'],
-                'subtotal': item_subtotal,
-                'notes': item_data.get('notes', ''),
-            })
-        
-        # Calculate tax
-        tax = subtotal * restaurant.tax_rate
-        total_amount = subtotal + tax
-        
-        # Get client IP
-        ip_address = self.get_client_ip()
-
-        # PRD Rules:
-        # - Staff-created cash orders MUST start as pending
-        # - Payment is only confirmed when a can_collect_cash staff member collects it
-        # - Use lowercase status values
-        order = Order.objects.create(
-            restaurant=restaurant,
-            order_number=order_number,
-            daily_sequence=daily_sequence,
-            order_type=Order.OrderType.STAFF_CASH,
-            customer_name=validated_data.get('customer_name', ''),
-            status='pending',  # Lowercase per PRD
-            payment_method='cash',  # Lowercase per PRD
-            payment_status='pending',  # Lowercase per PRD - NEVER set by frontend
-            subtotal=subtotal,
-            tax=tax,
-            total_amount=total_amount,
-            created_by=user,
-        )
-        
-        # Create order items
-        for item in order_items:
-            OrderItem.objects.create(order=order, **item)
-        
-        # Create cash audit log for staff-created order
-        CashAuditLog.objects.create(
-            order=order,
-            restaurant=restaurant,
-            staff=user,
-            action=CashAuditLog.Action.CASH_ORDER_CREATED,
-            amount=total_amount,
-            ip_address=ip_address,
-        )
-        
-        return order
+            for item_data in items_data:
+                try:
+                    # LOCK the menu item row
+                    menu_item = MenuItem.objects.select_for_update().get(
+                        id=item_data['menu_item_id'],
+                        restaurant=restaurant,
+                        is_active=True,
+                        is_available=True
+                    )
+                except MenuItem.DoesNotExist:
+                    raise serializers.ValidationError(
+                        f"Menu item {item_data['menu_item_id']} not found or unavailable."
+                    )
+                
+                # STOCK CHECK & DECREMENT
+                quantity = item_data['quantity']
+                if menu_item.stock_quantity is not None:
+                    if menu_item.stock_quantity < quantity:
+                        raise serializers.ValidationError(
+                            f"Insufficient stock for {menu_item.name}. Available: {menu_item.stock_quantity}, Requested: {quantity}"
+                        )
+                    menu_item.stock_quantity -= quantity
+                    menu_item.save(update_fields=['stock_quantity', 'updated_at'])
+                
+                item_subtotal = menu_item.price * quantity
+                subtotal += item_subtotal
+                
+                order_items.append({
+                    'menu_item': menu_item,
+                    'menu_item_name': menu_item.name,
+                    'price_at_order': menu_item.price,
+                    'quantity': quantity,
+                    'subtotal': item_subtotal,
+                    'notes': item_data.get('notes', ''),
+                })
+            
+            # Calculate tax
+            tax = subtotal * Decimal(str(restaurant.tax_rate))
+            total_amount = subtotal + tax
+            
+            # Get client IP
+            ip_address = self.get_client_ip()
+    
+            # PRD Rules:
+            # - Staff-created cash orders MUST start as pending
+            # - Payment is only confirmed when a can_collect_cash staff member collects it
+            # - Use lowercase status values
+            order = Order.objects.create(
+                restaurant=restaurant,
+                order_number=order_number,
+                daily_sequence=daily_sequence,
+                order_type=Order.OrderType.STAFF_CASH,
+                customer_name=validated_data.get('customer_name', ''),
+                status='pending',  # Lowercase per PRD
+                payment_method='cash',  # Lowercase per PRD
+                payment_status='pending',  # Lowercase per PRD - NEVER set by frontend
+                subtotal=subtotal,
+                tax=tax,
+                total_amount=total_amount,
+                created_by=user,
+            )
+            
+            # Create order items
+            for item in order_items:
+                OrderItem.objects.create(order=order, **item)
+            
+            # Create cash audit log for staff-created order
+            CashAuditLog.objects.create(
+                order=order,
+                restaurant=restaurant,
+                staff=user,
+                action=CashAuditLog.Action.CASH_ORDER_CREATED,
+                amount=total_amount,
+                ip_address=ip_address,
+            )
+            
+            return order
     
     def get_client_ip(self):
         """Extract client IP from request."""

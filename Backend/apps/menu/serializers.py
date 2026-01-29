@@ -10,6 +10,8 @@ class MenuItemSerializer(serializers.ModelSerializer):
     """Full menu item serializer for owners."""
     
     category_name = serializers.CharField(source='category.name', read_only=True)
+    is_in_stock = serializers.BooleanField(read_only=True)
+    effective_availability = serializers.BooleanField(read_only=True)
     
     class Meta:
         model = MenuItem
@@ -17,6 +19,8 @@ class MenuItemSerializer(serializers.ModelSerializer):
             'id', 'category', 'category_name', 'restaurant',
             'name', 'description', 'price', 'image',
             'display_order', 'is_available', 'is_active',
+            'stock_quantity', 'unavailable_reason', 'unavailable_since',
+            'is_in_stock', 'effective_availability',
             'times_ordered', 'version',
             'is_vegetarian', 'is_vegan', 'is_gluten_free',
             'prep_time_minutes',
@@ -67,8 +71,13 @@ class MenuCategoryPublicSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'description', 'items']
     
     def to_representation(self, instance):
-        # Filter to only active and available items
-        instance.active_items = instance.items.filter(is_active=True, is_available=True)
+        # Filter to only active, available, AND in-stock items
+        from django.db.models import Q
+        instance.active_items = instance.items.filter(
+            Q(is_active=True) & 
+            Q(is_available=True) & 
+            (Q(stock_quantity__isnull=True) | Q(stock_quantity__gt=0))
+        )
         return super().to_representation(instance)
 
 
@@ -105,3 +114,31 @@ class MenuItemCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['restaurant'] = self.context['restaurant']
         return super().create(validated_data)
+
+
+class MenuItemStockUpdateSerializer(serializers.Serializer):
+    """Serializer for updating item availability and stock."""
+    
+    is_available = serializers.BooleanField(required=False)
+    stock_quantity = serializers.IntegerField(required=False, allow_null=True, min_value=0)
+    reason = serializers.CharField(required=False, allow_blank=True, max_length=255)
+
+
+class MenuItemStaffSerializer(serializers.ModelSerializer):
+    """Menu item serializer for staff - includes stock info but not all editing fields."""
+    
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    is_in_stock = serializers.BooleanField(read_only=True)
+    effective_availability = serializers.BooleanField(read_only=True)
+    
+    class Meta:
+        model = MenuItem
+        fields = [
+            'id', 'category', 'category_name',
+            'name', 'description', 'price', 'image',
+            'is_available', 'is_active',
+            'stock_quantity', 'unavailable_reason', 'unavailable_since',
+            'is_in_stock', 'effective_availability',
+            'is_vegetarian', 'is_vegan', 'is_gluten_free',
+        ]
+        read_only_fields = fields  # Staff can only view, stock updates via dedicated endpoint

@@ -1,27 +1,21 @@
-"""
-Signals for the Orders app.
-"""
-
-from django.db.models.signals import post_save
+from django.db.models.signals import post_delete
 from django.dispatch import receiver
-from .models import Order, OrderItem
-from .emails import send_staff_order_notification
-import logging
+from django.db.models import F
+from .models import OrderItem
 
-logger = logging.getLogger(__name__)
-
-
-@receiver(post_save, sender=Order)
-def handle_order_created(sender, instance, created, **kwargs):
-    """Send notifications when order is created."""
-    if created:
-        # Notify restaurant staff via email
-        send_staff_order_notification(instance)
-        logger.info(f"Order {instance.order_number} created, staff notified")
-
-
-@receiver(post_save, sender=OrderItem)
-def update_menu_item_stats(sender, instance, created, **kwargs):
-    """Update menu item order count when order item is created."""
-    if created and instance.menu_item:
-        instance.menu_item.increment_times_ordered(instance.quantity)
+@receiver(post_delete, sender=OrderItem)
+def restore_stock_on_delete(sender, instance, **kwargs):
+    """
+    Restore stock when an OrderItem is deleted.
+    This handles:
+    1. Order cancellation/deletion
+    2. Stale order cleanup
+    """
+    try:
+        if instance.menu_item and instance.menu_item.stock_quantity is not None:
+            # Use F() expression to avoid race conditions
+            instance.menu_item.stock_quantity = F('stock_quantity') + instance.quantity
+            instance.menu_item.save(update_fields=['stock_quantity'])
+    except Exception:
+        # Menu item might be deleted already, or stock cleanup not needed
+        pass

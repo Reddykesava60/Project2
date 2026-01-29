@@ -58,6 +58,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (token && !isTokenExpired(token) && storedUser) {
         setUser(storedUser)
         useAuthStore.getState().setUser(storedUser as any)
+
+        // Background refresh to ensure permissions are up to date
+        authApi.getCurrentUser().then((res) => {
+          if (res.success && res.data) {
+            const freshUser = res.data as unknown as User
+            setUser(freshUser)
+            setStoredUser(freshUser)
+            useAuthStore.getState().setUser(freshUser as any)
+          }
+        })
       } else {
         removeAuthToken()
         removeStoredUser()

@@ -13,10 +13,14 @@ export interface User {
   isVerified?: boolean
   restaurantId?: string
   restaurantName?: string
+  // Runtime snake_case support
+  restaurant_id?: string
+  can_manage_stock?: boolean
 
   // Staff-specific permissions (only for STAFF role, but owners also have these)
   canCollectCash?: boolean
   canOverrideOrders?: boolean
+  canManageStock?: boolean
 
   // Security
   twoFactorEnabled: boolean
@@ -97,9 +101,12 @@ export interface MenuItem {
   categoryName: string
   restaurantId: string
   image?: string
+  stock_quantity?: number | null
 
   // Availability
   isAvailable: boolean
+  is_active?: boolean
+  isActive?: boolean
   availableFrom?: string  // Time format "HH:mm"
   availableUntil?: string // Time format "HH:mm"
 

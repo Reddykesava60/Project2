@@ -87,7 +87,7 @@ class StaffSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'user', 'user_name', 'user_email',
             'restaurant', 'position',
-            'can_collect_cash', 'can_override_orders',
+            'can_collect_cash', 'can_override_orders', 'can_manage_stock',
             'is_active', 'two_factor_enabled',
             'created_at', 'updated_at',
         ]
@@ -106,7 +106,7 @@ class StaffCreateSerializer(serializers.ModelSerializer):
         model = Staff
         fields = [
             'email', 'first_name', 'last_name', 'password',
-            'position', 'can_collect_cash', 'can_override_orders',
+            'position', 'can_collect_cash', 'can_override_orders', 'can_manage_stock',
         ]
     
     def validate_email(self, value):
@@ -135,6 +135,7 @@ class StaffCreateSerializer(serializers.ModelSerializer):
             position=validated_data.get('position', ''),
             can_collect_cash=validated_data.get('can_collect_cash', False),
             can_override_orders=validated_data.get('can_override_orders', False),
+            can_manage_stock=validated_data.get('can_manage_stock', False),
         )
         
         return staff

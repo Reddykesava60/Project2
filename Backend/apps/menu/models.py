@@ -63,11 +63,29 @@ class MenuItem(VersionedModel):
     is_available = models.BooleanField(default=True)
     is_active = models.BooleanField(default=True)
     
+    # Stock management
+    stock_quantity = models.PositiveIntegerField(
+        null=True, 
+        blank=True,
+        help_text='Current stock quantity. NULL means unlimited stock.'
+    )
+    unavailable_reason = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Reason why item is unavailable (e.g., "Out of stock", "Seasonal")'
+    )
+    unavailable_since = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='When the item became unavailable'
+    )
+    
     # Analytics
     times_ordered = models.PositiveIntegerField(default=0)
     
-    # Dietary info
-    is_vegetarian = models.BooleanField(default=False)
+    # Dietary info (default to vegetarian for Indian restaurant context)
+    is_vegetarian = models.BooleanField(default=True)
     is_vegan = models.BooleanField(default=False)
     is_gluten_free = models.BooleanField(default=False)
     
@@ -86,6 +104,70 @@ class MenuItem(VersionedModel):
         """Increment the times_ordered counter."""
         self.times_ordered += count
         self.save(update_fields=['times_ordered', 'updated_at'])
+    
+    @property
+    def is_in_stock(self) -> bool:
+        """Check if item is in stock. NULL stock_quantity means unlimited."""
+        if self.stock_quantity is None:
+            return True
+        return self.stock_quantity > 0
+    
+    @property
+    def effective_availability(self) -> bool:
+        """Check if item is effectively available (is_available AND in stock)."""
+        return self.is_available and self.is_active and self.is_in_stock
+    
+    def reduce_stock(self, quantity: int) -> bool:
+        """
+        Atomically reduce stock quantity. Returns True if successful.
+        Uses F expressions to prevent race conditions.
+        """
+        from django.db.models import F
+        from django.utils import timezone
+        
+        if self.stock_quantity is None:
+            # Unlimited stock
+            return True
+        
+        # Atomically check and reduce
+        updated = MenuItem.objects.filter(
+            pk=self.pk,
+            stock_quantity__gte=quantity
+        ).update(
+            stock_quantity=F('stock_quantity') - quantity,
+            updated_at=timezone.now()
+        )
+        
+        if updated:
+            self.refresh_from_db()
+            # Auto-mark unavailable if stock depleted
+            if self.stock_quantity == 0:
+                self.is_available = False
+                self.unavailable_reason = 'Out of stock'
+                self.unavailable_since = timezone.now()
+                self.save(update_fields=['is_available', 'unavailable_reason', 'unavailable_since', 'updated_at'])
+            return True
+        return False
+    
+    def restock(self, quantity: int, mark_available: bool = True):
+        """Add stock and optionally mark as available."""
+        from django.db.models import F
+        from django.utils import timezone
+        
+        if self.stock_quantity is None:
+            self.stock_quantity = quantity
+        else:
+            MenuItem.objects.filter(pk=self.pk).update(
+                stock_quantity=F('stock_quantity') + quantity,
+                updated_at=timezone.now()
+            )
+            self.refresh_from_db()
+        
+        if mark_available and not self.is_available:
+            self.is_available = True
+            self.unavailable_reason = ''
+            self.unavailable_since = None
+            self.save(update_fields=['is_available', 'unavailable_reason', 'unavailable_since', 'stock_quantity', 'updated_at'])
 
 
 class MenuItemAttribute(models.Model):

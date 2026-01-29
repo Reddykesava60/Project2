@@ -33,6 +33,7 @@ class StaffAdmin(admin.ModelAdmin):
     list_filter = ['is_active', 'can_collect_cash', 'can_override_orders', 'restaurant']
     search_fields = ['user__email', 'user__first_name', 'user__last_name', 'restaurant__name']
     ordering = ['restaurant', 'user__first_name']
+    list_editable = ['can_collect_cash', 'can_override_orders', 'is_active']
 
 
 @admin.register(ApiKey)
