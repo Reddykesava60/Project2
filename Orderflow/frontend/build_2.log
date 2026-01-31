@@ -1,0 +1,23 @@
+
+> my-v0-project@0.1.0 build
+> next build
+
+  ▲ Next.js 14.2.5
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+Failed to compile.
+
+./lib/api.ts:74:16
+Type error: Conversion of type 'ApiResponse<{ user: User; access: string; refresh: string; }>' to type 'ApiResponse<{ user: User; token: string; }>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Property 'token' is missing in type '{ user: User; access: string; refresh: string; }' but required in type '{ user: User; token: string; }'.
+
+[0m [90m 72 |[39m     )[33m.[39mthen((res) [33m=>[39m {[0m
+[0m [90m 73 |[39m       [36mif[39m ([33m![39mres[33m.[39msuccess [33m||[39m [33m![39mres[33m.[39mdata) {[0m
+[0m[31m[1m>[22m[39m[90m 74 |[39m         [36mreturn[39m res [36mas[39m [33mApiResponse[39m[33m<[39m{ user[33m:[39m [33mUser[39m[33m;[39m token[33m:[39m string }[33m>[39m[0m
+[0m [90m    |[39m                [31m[1m^[22m[39m[0m
+[0m [90m 75 |[39m       }[0m
+[0m [90m 76 |[39m[0m
+[0m [90m 77 |[39m       [90m// Backend returns { access, refresh, user }; frontend expects { user, token }[39m[0m

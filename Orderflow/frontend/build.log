@@ -1,0 +1,23 @@
+
+> my-v0-project@0.1.0 build
+> next build
+
+  ▲ Next.js 14.2.5
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+Failed to compile.
+
+./components/ui/calendar.tsx:187:7
+Type error: Type '{ disabled?: boolean | undefined; form?: string | undefined; formAction?: string | ((formData: FormData) => void) | undefined; formEncType?: string | undefined; formMethod?: string | undefined; ... 278 more ...; className: string; }' is not assignable to type 'IntrinsicAttributes & ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<(props?: (ConfigVariants<{ variant: { default: string; destructive: string; outline: string; secondary: string; ghost: string; link: string; }; size: { ...; }; }> & ClassProp) | undefined) => string> & { ...; }'.
+  Property 'ref' does not exist on type 'IntrinsicAttributes & ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<(props?: (ConfigVariants<{ variant: { default: string; destructive: string; outline: string; secondary: string; ghost: string; link: string; }; size: { ...; }; }> & ClassProp) | undefined) => string> & { ...; }'.
+
+[0m [90m 185 |[39m   [36mreturn[39m ([0m
+[0m [90m 186 |[39m     [33m<[39m[33mButton[39m[0m
+[0m[31m[1m>[22m[39m[90m 187 |[39m       ref[33m=[39m{ref}[0m
+[0m [90m     |[39m       [31m[1m^[22m[39m[0m
+[0m [90m 188 |[39m       variant[33m=[39m[32m"ghost"[39m[0m
+[0m [90m 189 |[39m       size[33m=[39m[32m"icon"[39m[0m
+[0m [90m 190 |[39m       data[33m-[39mday[33m=[39m{day[33m.[39mdate[33m.[39mtoLocaleDateString()}[0m

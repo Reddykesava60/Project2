@@ -1,0 +1,94 @@
+services:
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./Backend/.env
+    command: >
+      sh -c "
+      python manage.py migrate &&
+      python manage.py collectstatic --noinput &&
+      python manage.py runserver 0.0.0.0:8000
+      "
+    volumes:
+      - ./Backend:/app
+      - media_data:/app/media
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    restart: always
+    develop:
+      watch:
+        - action: sync
+          path: ./Backend
+          target: /app
+        - action: rebuild
+          path: ./Backend/requirements.txt
+
+  frontend:
+    image: node:18-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    env_file:
+      - ./frontend/.env.local
+    command: sh -c "npm install && npm run dev -- --hostname 0.0.0.0"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: always
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend
+          target: /app
+        - action: rebuild
+          path: ./frontend/package.json
+        - action: rebuild
+          path: ./frontend/package-lock.json
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: orderflow
+      POSTGRES_USER: orderflow
+      POSTGRES_PASSWORD: orderflow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: always
+
+  celery:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    command: celery -A config worker -l info
+    env_file:
+      - ./Backend/.env
+    volumes:
+      - ./Backend:/app
+      - media_data:/app/media
+    depends_on:
+      - backend
+      - redis
+    restart: always
+    develop:
+      watch:
+        - action: sync
+          path: ./Backend
+          target: /app
+
+volumes:
+  pgdata:
+  media_data:

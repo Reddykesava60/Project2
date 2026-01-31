@@ -1,0 +1,119 @@
+
+> my-v0-project@0.1.0 build
+> next build
+
+  ▲ Next.js 14.2.5
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/31) ...
+Dashboard stats API error: q [Error]: Dynamic server usage: Route /api/dashboard/stats couldn't be rendered statically because it used `request.headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at W (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:21106)
+    at Object.get (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:28459)
+    at p (C:\User\Projects\Fresh\DineFlow2\frontend\.next\server\app\api\dashboard\stats\route.js:1:579)
+    at C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:36264
+    at C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\server\lib\trace\tracer.js:140:36
+    at NoopContextManager.with (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:7062)
+    at ContextAPI.with (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:518)
+    at NoopTracer.startActiveSpan (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:18093)
+    at ProxyTracer.startActiveSpan (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:18854)
+    at C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\server\lib\trace\tracer.js:122:103 {
+  description: "Route /api/dashboard/stats couldn't be rendered statically because it used `request.headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+Active orders API error: q [Error]: Dynamic server usage: Route /api/orders/active couldn't be rendered statically because it used `request.headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at W (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:21106)
+    at Object.get (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:28459)
+    at p (C:\User\Projects\Fresh\DineFlow2\frontend\.next\server\app\api\orders\active\route.js:1:579)
+    at C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:36264
+    at C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\server\lib\trace\tracer.js:140:36
+    at NoopContextManager.with (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:7062)
+    at ContextAPI.with (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:518)
+    at NoopTracer.startActiveSpan (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:18093)
+    at ProxyTracer.startActiveSpan (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:18854)
+    at C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\server\lib\trace\tracer.js:122:103 {
+  description: "Route /api/orders/active couldn't be rendered statically because it used `request.headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+API Base URL: http://localhost:8000/api
+API Base URL: http://localhost:8000/api
+API Base URL: http://localhost:8000/api
+API Base URL: http://localhost:8000/api
+API Base URL: http://localhost:8000/api
+API Base URL: http://localhost:8000/api
+API Base URL: http://localhost:8000/api
+   Generating static pages (7/31) 
+   Generating static pages (15/31) 
+API Base URL: http://localhost:8000/api
+API Base URL: http://localhost:8000/api
+API Base URL: http://localhost:8000/api
+   Generating static pages (23/31) 
+API Base URL: http://localhost:8000/api
+Restaurants API error: q [Error]: Dynamic server usage: Route /api/restaurants couldn't be rendered statically because it used `request.headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at W (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:21106)
+    at Object.get (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:28459)
+    at p (C:\User\Projects\Fresh\DineFlow2\frontend\.next\server\app\api\restaurants\route.js:1:579)
+    at C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:36264
+    at C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\server\lib\trace\tracer.js:140:36
+    at NoopContextManager.with (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:7062)
+    at ContextAPI.with (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:518)
+    at NoopTracer.startActiveSpan (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:18093)
+    at ProxyTracer.startActiveSpan (C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:18854)
+    at C:\User\Projects\Fresh\DineFlow2\frontend\node_modules\next\dist\server\lib\trace\tracer.js:122:103 {
+  description: "Route /api/restaurants couldn't be rendered statically because it used `request.headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+ ✓ Generating static pages (31/31)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    8.95 kB         127 kB
+├ ○ /_not-found                          879 B          88.3 kB
+├ ○ /admin/audit-logs                    3.97 kB         153 kB
+├ ○ /admin/billing                       4.72 kB         165 kB
+├ ○ /admin/dashboard                     9.35 kB         211 kB
+├ ○ /admin/restaurants                   8.04 kB         157 kB
+├ ƒ /admin/restaurants/[id]              6.11 kB         166 kB
+├ ○ /admin/subscriptions                 8.06 kB         157 kB
+├ ○ /admin/system-health                 4.66 kB         165 kB
+├ ƒ /api/dashboard/stats                 0 B                0 B
+├ ƒ /api/menu/categories                 0 B                0 B
+├ ƒ /api/menu/items                      0 B                0 B
+├ ƒ /api/menu/items/[id]                 0 B                0 B
+├ ƒ /api/menu/items/[id]/toggle          0 B                0 B
+├ ƒ /api/orders                          0 B                0 B
+├ ƒ /api/orders/[id]/payment             0 B                0 B
+├ ƒ /api/orders/[id]/status              0 B                0 B
+├ ƒ /api/orders/active                   0 B                0 B
+├ ƒ /api/restaurants                     0 B                0 B
+├ ○ /login                               8.95 kB         127 kB
+├ ○ /owner/analytics                     13.1 kB         281 kB
+├ ○ /owner/dashboard                     5.45 kB         139 kB
+├ ○ /owner/menu                          13.5 kB         150 kB
+├ ○ /owner/orders                        1.95 kB         152 kB
+├ ○ /owner/qr                            6.18 kB         145 kB
+├ ○ /owner/qr-management                 4.82 kB         263 kB
+├ ○ /owner/security                      7.07 kB         167 kB
+├ ○ /owner/settings                      8.11 kB         130 kB
+├ ○ /owner/staff                         9.19 kB         148 kB
+├ ƒ /r/[slug]                            6.45 kB         134 kB
+├ ƒ /r/[slug]/checkout                   13.8 kB         135 kB
+├ ƒ /r/[slug]/order-success              4.55 kB         139 kB
+├ ○ /staff/create-order                  7.24 kB         167 kB
+├ ○ /staff/new-order                     6.65 kB         134 kB
+├ ○ /staff/orders                        3.38 kB         153 kB
+├ ○ /staff/scan                          7.47 kB         129 kB
+└ ○ /staff/stock                         10.2 kB         146 kB
++ First Load JS shared by all            87.4 kB
+  ├ chunks/7023-e5f3d3e307a5b8b5.js      31.7 kB
+  ├ chunks/fd9d1056-27a775b23085fbdb.js  53.6 kB
+  └ other shared chunks (total)          2.09 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
